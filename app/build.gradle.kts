@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "xyz.mininxd.savesx2"
+    namespace = "xyz.savesx2"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "xyz.mininxd.savesx2"
+        applicationId = "xyz.savesx2"
         minSdk = 26
         targetSdk = 34
         versionCode = 15
