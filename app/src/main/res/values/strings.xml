@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">PS2 Memcard Editor</string>
+    <string name="app_name">SAVESX2</string>
     <string name="open_card">Open Card</string>
     <string name="create_card">New Card</string>
     <string name="format_card">Format Card</string>

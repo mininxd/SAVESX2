@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="icon.png" width="128" alt="PS2 Memory Card Editor Logo" />
+  <img src="icon.png" width="128" alt="SAVESX2 Logo" />
 </p>
 
-<h1 align="center">PS2 Memory Card Reader & Editor for Android</h1>
+<h1 align="center">SAVESX2 - PS2 Memory Card Reader & Editor for Android</h1>
 
 <p align="center">
   <strong>A modern, standalone PlayStation 2 Memory Card Reader, Manager, and Savegame Editor for Android.</strong>
@@ -21,7 +21,7 @@
 
 ## Overview
 
-**PS2 Memory Card Reader & Editor** is a feature-rich, standalone utility engineered for Android devices to browse, manage, inspect, backup, and edit PlayStation 2 memory cards and savegames. Designed natively using **Jetpack Compose** and **Material You (Material 3)**, it offers a seamless mobile experience for emulator enthusiasts (PCSX2, ARMSX2, AetherSX2, NetherSX2) and real PS2 console owners managing saves over USB-OTG adapters or SD cards.
+**SAVESX2** is a feature-rich, standalone utility engineered for Android devices to browse, manage, inspect, backup, and edit PlayStation 2 memory cards and savegames. Designed natively using **Jetpack Compose** and **Material You (Material 3)**, it offers a seamless mobile experience for emulator enthusiasts (PCSX2, ARMSX2, AetherSX2, NetherSX2) and real PS2 console owners managing saves over USB-OTG adapters or SD cards.
 
 ---
 
@@ -79,7 +79,7 @@
 The repository includes a ready-to-run GitHub Actions workflow:
 
 1. Navigate to the **Actions** tab in the repository.
-2. Select **Build PS2 Memory Card Editor APK**.
+2. Select **Build SAVESX2 APK**.
 3. Click **Run workflow**, pick your branch and build type (`release` or `debug`), and click **Run workflow**.
 4. When finished, download the compiled APK artifact directly from the workflow summary page.
 

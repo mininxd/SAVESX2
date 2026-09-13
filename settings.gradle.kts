@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PS2MemcardEditor"
+rootProject.name = "SAVESX2"
 include(":app")

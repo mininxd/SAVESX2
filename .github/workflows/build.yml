@@ -1,4 +1,4 @@
-name: Build PS2 Memory Card Editor APK
+name: Build SAVESX2 APK
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_type == 'debug' || inputs.build_type == 'both' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ps2-memcard-editor-debug-apk
+          name: savesx2-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14
 
@@ -56,6 +56,6 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_type == 'release' || inputs.build_type == 'both' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ps2-memcard-editor-release-apk
+          name: savesx2-release-apk
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30

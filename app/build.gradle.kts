@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "xyz.mininxd.ps2memcards"
+    namespace = "xyz.mininxd.savesx2"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "xyz.mininxd.ps2memcards"
+        applicationId = "xyz.mininxd.savesx2"
         minSdk = 26
         targetSdk = 34
         versionCode = 14

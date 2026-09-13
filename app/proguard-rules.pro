@@ -1,10 +1,10 @@
-# Proguard rules for PS2 Memory Card Editor
+# Proguard rules for SAVESX2
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 
 # Keep core and UI model classes
--keep class xyz.mininxd.ps2memcards.core.** { *; }
--keep class xyz.mininxd.ps2memcards.model.** { *; }
--keep class xyz.mininxd.ps2memcards.ui.components.** { *; }
+-keep class xyz.mininxd.savesx2.core.** { *; }
+-keep class xyz.mininxd.savesx2.model.** { *; }
+-keep class xyz.mininxd.savesx2.ui.components.** { *; }
 
 # Kotlin Coroutines internal factories
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
