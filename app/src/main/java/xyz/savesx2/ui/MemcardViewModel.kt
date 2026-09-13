@@ -223,6 +223,7 @@ class MemcardViewModel : ViewModel() {
 
     private val _hasLegacyApp = MutableStateFlow(false)
     val hasLegacyApp: StateFlow<Boolean> = _hasLegacyApp.asStateFlow()
+    private var legacyAppDismissed = false
 
     fun checkLegacyApp(context: Context) {
         val isInstalled = try {
@@ -231,10 +232,15 @@ class MemcardViewModel : ViewModel() {
         } catch (_: Exception) {
             false
         }
-        _hasLegacyApp.value = isInstalled
+        if (!isInstalled) {
+            _hasLegacyApp.value = false
+        } else if (!legacyAppDismissed) {
+            _hasLegacyApp.value = true
+        }
     }
 
     fun dismissLegacyAppPrompt() {
+        legacyAppDismissed = true
         _hasLegacyApp.value = false
     }
 

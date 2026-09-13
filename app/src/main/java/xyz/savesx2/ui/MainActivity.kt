@@ -927,13 +927,32 @@ class MainActivity : ComponentActivity() {
                         confirmButton = {
                             Button(
                                 onClick = {
+                                    viewModel.dismissLegacyAppPrompt()
+                                    val legacyPkg = "xyz.mininxd.ps2memcards"
                                     try {
                                         val uninstallIntent = Intent(Intent.ACTION_DELETE).apply {
-                                            data = Uri.parse("package:xyz.mininxd.ps2memcards")
+                                            data = Uri.parse("package:$legacyPkg")
+                                            putExtra(Intent.EXTRA_RETURN_RESULT, true)
                                         }
                                         startActivity(uninstallIntent)
-                                    } catch (e: Exception) {
-                                        showToast("Could not launch uninstaller: ${e.message}")
+                                    } catch (_: Exception) {
+                                        try {
+                                            @Suppress("DEPRECATION")
+                                            val fallbackIntent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
+                                                data = Uri.parse("package:$legacyPkg")
+                                                putExtra(Intent.EXTRA_RETURN_RESULT, true)
+                                            }
+                                            startActivity(fallbackIntent)
+                                        } catch (_: Exception) {
+                                            try {
+                                                val appDetailsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                    data = Uri.parse("package:$legacyPkg")
+                                                }
+                                                startActivity(appDetailsIntent)
+                                            } catch (e: Exception) {
+                                                showToast("Could not launch uninstaller: ${e.message}")
+                                            }
+                                        }
                                     }
                                 }
                             ) {
