@@ -21,6 +21,7 @@
         </intent>
         <package android:name="com.google.android.documentsui" />
         <package android:name="com.android.documentsui" />
+        <package android:name="xyz.mininxd.ps2memcards" />
     </queries>
 
     <application

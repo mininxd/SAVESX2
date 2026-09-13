@@ -221,9 +221,27 @@ class MemcardViewModel : ViewModel() {
     private val _hasStoragePermission = MutableStateFlow(true)
     val hasStoragePermission: StateFlow<Boolean> = _hasStoragePermission.asStateFlow()
 
+    private val _hasLegacyApp = MutableStateFlow(false)
+    val hasLegacyApp: StateFlow<Boolean> = _hasLegacyApp.asStateFlow()
+
+    fun checkLegacyApp(context: Context) {
+        val isInstalled = try {
+            context.packageManager.getPackageInfo("xyz.mininxd.ps2memcards", 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+        _hasLegacyApp.value = isInstalled
+    }
+
+    fun dismissLegacyAppPrompt() {
+        _hasLegacyApp.value = false
+    }
+
     fun initSettings(context: Context) {
         _recentCards.value = RecentCardsManager.getRecentCards(context)
         _exportFilenameFormat.value = ExportFilenameFormat.getSavedFormat(context)
+        checkLegacyApp(context)
     }
 
     fun addRecentCard(context: Context, recent: RecentCard) {

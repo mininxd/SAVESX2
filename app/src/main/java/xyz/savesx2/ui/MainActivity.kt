@@ -484,6 +484,7 @@ class MainActivity : ComponentActivity() {
                 val isRefreshing by viewModel.isRefreshing.collectAsState()
                 val canUndo by viewModel.canUndo.collectAsState()
                 val canRedo by viewModel.canRedo.collectAsState()
+                val hasLegacyApp by viewModel.hasLegacyApp.collectAsState()
 
                 LaunchedEffect(snackbarMessage) {
                     snackbarMessage?.let { msg ->
@@ -897,12 +898,62 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+
+                if (hasLegacyApp) {
+                    AlertDialog(
+                        onDismissRequest = { viewModel.dismissLegacyAppPrompt() },
+                        shape = RoundedCornerShape(24.dp),
+                        title = {
+                            Text(
+                                text = "Older App Detected",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Column {
+                                Text(
+                                    text = "An older version of this app (xyz.mininxd.ps2memcards) was detected on your device.",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "To avoid duplicate file associations and confusion, it is recommended to uninstall it.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    try {
+                                        val uninstallIntent = Intent(Intent.ACTION_DELETE).apply {
+                                            data = Uri.parse("package:xyz.mininxd.ps2memcards")
+                                        }
+                                        startActivity(uninstallIntent)
+                                    } catch (e: Exception) {
+                                        showToast("Could not launch uninstaller: ${e.message}")
+                                    }
+                                }
+                            ) {
+                                Text("Uninstall")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { viewModel.dismissLegacyAppPrompt() }) {
+                                Text("Later")
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 
     override fun onRestart() {
         super.onRestart()
+        viewModel.checkLegacyApp(this)
         if (!isWaitingForActivityResult) {
             val granted = StoragePermissionHelper.hasStoragePermission(this)
             viewModel.updateStoragePermission(granted)
@@ -917,6 +968,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val granted = StoragePermissionHelper.hasStoragePermission(this)
         viewModel.updateStoragePermission(granted)
+        viewModel.checkLegacyApp(this)
     }
 
     override fun onNewIntent(intent: Intent) {
