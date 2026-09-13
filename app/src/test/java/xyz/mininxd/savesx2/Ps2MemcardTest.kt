@@ -911,6 +911,11 @@ class Ps2MemcardTest {
         assertEquals("32 MB", RecentCard.formatSize(33L * 1024 * 1024))
         assertEquals("128 MB", RecentCard.formatSize(132L * 1024 * 1024))
 
+        // Sizes below 8MB like 4MB, 5MB should round up to minimum 8MB
+        assertEquals("8 MB", RecentCard.formatSize(4L * 1024 * 1024))
+        assertEquals("8 MB", RecentCard.formatSize(5L * 1024 * 1024))
+        assertEquals("8 MB", RecentCard.formatSize(1L * 1024 * 1024))
+
         // formattedSize property on RecentCard instance
         val recentCard66 = RecentCard(
             uriString = "content://test/card.ps2",
@@ -918,6 +923,16 @@ class Ps2MemcardTest {
             sizeBytes = 66L * 1024 * 1024
         )
         assertEquals("64 MB", recentCard66.formattedSize)
+        assertFalse(recentCard66.isFolderType)
+
+        // Folder memory card
+        val folderCard = RecentCard(
+            uriString = "content://test/_pcsx2_superblock",
+            fileName = "PCSX2 Folder Card",
+            sizeBytes = 8L * 1024 * 1024,
+            isFolder = true
+        )
+        assertTrue(folderCard.isFolderType)
     }
 }
 

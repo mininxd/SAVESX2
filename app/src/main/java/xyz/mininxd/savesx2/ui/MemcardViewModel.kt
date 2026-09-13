@@ -294,7 +294,8 @@ class MemcardViewModel : ViewModel() {
                     fileName = name,
                     sizeBytes = updated.memcard.getRawDataDirect().size.toLong(),
                     saveCount = updated.saves.size,
-                    lastOpened = System.currentTimeMillis()
+                    lastOpened = System.currentTimeMillis(),
+                    isFolder = updated.isFolderCard
                 )
             )
         }
@@ -708,7 +709,8 @@ class MemcardViewModel : ViewModel() {
                                     fileName = cardName,
                                     sizeBytes = card.totalCapacityBytes,
                                     saveCount = saves.size,
-                                    lastOpened = System.currentTimeMillis()
+                                    lastOpened = System.currentTimeMillis(),
+                                    isFolder = true
                                 )
                             )
                         }
@@ -771,7 +773,8 @@ class MemcardViewModel : ViewModel() {
                                                 fileName = cardName,
                                                 sizeBytes = card.totalCapacityBytes,
                                                 saveCount = saves.size,
-                                                lastOpened = System.currentTimeMillis()
+                                                lastOpened = System.currentTimeMillis(),
+                                                isFolder = true
                                             )
                                         )
                                     }

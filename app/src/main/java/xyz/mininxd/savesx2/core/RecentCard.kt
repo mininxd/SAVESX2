@@ -11,18 +11,20 @@ data class RecentCard(
     val fileName: String,
     val sizeBytes: Long = 0L,
     val saveCount: Int = 0,
-    val lastOpened: Long = System.currentTimeMillis()
+    val lastOpened: Long = System.currentTimeMillis(),
+    val isFolder: Boolean = false
 ) {
+    val isFolderType: Boolean
+        get() = isFolder || uriString.contains("_pcsx2_superblock", ignoreCase = true) || fileName.contains("Folder", ignoreCase = true)
+
     val formattedSize: String?
         get() = formatSize(sizeBytes)
 
     companion object {
-        private val STANDARD_PS2_SIZES_MB = listOf(8, 16, 32, 64, 128)
-
         /**
          * Formats memory card size in MB.
          * If card has ECC spare area or file size is slightly off (e.g. 66MB -> 64MB, 33MB -> 32MB, 132MB -> 128MB),
-         * it rounds to the closest standard PS2 memory card size (8, 16, 32, 64, 128 MB).
+         * or smaller sizes like 4MB, 5MB -> 8MB, it rounds to the closest standard PS2 memory card size (8, 16, 32, 64, 128 MB).
          */
         fun formatSize(sizeBytes: Long): String? {
             if (sizeBytes <= 0L) return null
@@ -33,12 +35,13 @@ data class RecentCard(
                 sizeBytes
             }
             val rawMb = (effectiveBytes / (1024L * 1024L)).toInt()
-            val closest = STANDARD_PS2_SIZES_MB.minByOrNull { kotlin.math.abs(it - rawMb) } ?: rawMb
-            // If raw size is close to a standard PS2 memcard size, round to it
-            val roundedMb = if (kotlin.math.abs(closest - rawMb) <= maxOf(2, closest / 4)) {
-                closest
-            } else {
-                rawMb
+            val roundedMb = when {
+                rawMb <= 11 -> 8 // 4MB, 5MB, etc. rounded to minimum 8MB
+                rawMb <= 23 -> 16
+                rawMb <= 47 -> 32
+                rawMb <= 95 -> 64 // 66MB rounded to 64MB
+                rawMb <= 191 -> 128
+                else -> rawMb
             }
             return "$roundedMb MB"
         }
@@ -64,7 +67,8 @@ object RecentCardsManager {
                         fileName = obj.getString("fileName"),
                         sizeBytes = obj.optLong("sizeBytes", 0L),
                         saveCount = obj.optInt("saveCount", 0),
-                        lastOpened = obj.optLong("lastOpened", 0L)
+                        lastOpened = obj.optLong("lastOpened", 0L),
+                        isFolder = obj.optBoolean("isFolder", false)
                     )
                 )
             }
@@ -104,6 +108,7 @@ object RecentCardsManager {
                 put("sizeBytes", item.sizeBytes)
                 put("saveCount", item.saveCount)
                 put("lastOpened", item.lastOpened)
+                put("isFolder", item.isFolder)
             }
             arr.put(obj)
         }

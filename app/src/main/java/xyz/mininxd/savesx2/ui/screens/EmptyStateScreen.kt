@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SdCard
@@ -130,7 +131,7 @@ fun EmptyStateScreen(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.SdCard,
+                                    imageVector = if (recent.isFolderType) Icons.Default.Folder else Icons.Default.SdCard,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer
