@@ -148,7 +148,7 @@ fun EmptyStateScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            val sizeText = if (recent.sizeBytes > 0) "${recent.sizeBytes / (1024 * 1024)} MB" else null
+                            val sizeText = recent.formattedSize
                             val saveText = if (recent.saveCount > 0) "${recent.saveCount} saves" else null
                             val subtitleText = listOfNotNull(sizeText, saveText).joinToString(" • ")
                             if (subtitleText.isNotBlank()) {

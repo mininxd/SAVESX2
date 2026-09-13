@@ -12,7 +12,38 @@ data class RecentCard(
     val sizeBytes: Long = 0L,
     val saveCount: Int = 0,
     val lastOpened: Long = System.currentTimeMillis()
-)
+) {
+    val formattedSize: String?
+        get() = formatSize(sizeBytes)
+
+    companion object {
+        private val STANDARD_PS2_SIZES_MB = listOf(8, 16, 32, 64, 128)
+
+        /**
+         * Formats memory card size in MB.
+         * If card has ECC spare area or file size is slightly off (e.g. 66MB -> 64MB, 33MB -> 32MB, 132MB -> 128MB),
+         * it rounds to the closest standard PS2 memory card size (8, 16, 32, 64, 128 MB).
+         */
+        fun formatSize(sizeBytes: Long): String? {
+            if (sizeBytes <= 0L) return null
+            // Check if card image includes ECC spare area (528 bytes per page vs 512 bytes raw)
+            val effectiveBytes = if (sizeBytes % 528L == 0L) {
+                (sizeBytes / 528L) * 512L
+            } else {
+                sizeBytes
+            }
+            val rawMb = (effectiveBytes / (1024L * 1024L)).toInt()
+            val closest = STANDARD_PS2_SIZES_MB.minByOrNull { kotlin.math.abs(it - rawMb) } ?: rawMb
+            // If raw size is close to a standard PS2 memcard size, round to it
+            val roundedMb = if (kotlin.math.abs(closest - rawMb) <= maxOf(2, closest / 4)) {
+                closest
+            } else {
+                rawMb
+            }
+            return "$roundedMb MB"
+        }
+    }
+}
 
 object RecentCardsManager {
     private const val PREFS_NAME = "memcard_prefs"

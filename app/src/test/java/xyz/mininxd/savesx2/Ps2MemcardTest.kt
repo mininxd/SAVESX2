@@ -12,6 +12,7 @@ import xyz.mininxd.savesx2.core.Ps2Memcard
 import xyz.mininxd.savesx2.core.Ps2SuperBlock
 import xyz.mininxd.savesx2.core.Ps2Timestamp
 import xyz.mininxd.savesx2.core.PsuHandler
+import xyz.mininxd.savesx2.core.RecentCard
 import java.io.File
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -887,6 +888,36 @@ class Ps2MemcardTest {
         val fileEntry = saves[0].files.firstOrNull { it.name == "data.bin" }
         assertNotNull(fileEntry)
         assertEquals(editedPayload.size.toLong(), fileEntry!!.sizeInBytes)
+    }
+
+    @Test
+    fun testRecentCardFormatSize() {
+        // Standard RAW sizes
+        assertEquals("8 MB", RecentCard.formatSize(8L * 1024 * 1024))
+        assertEquals("16 MB", RecentCard.formatSize(16L * 1024 * 1024))
+        assertEquals("32 MB", RecentCard.formatSize(32L * 1024 * 1024))
+        assertEquals("64 MB", RecentCard.formatSize(64L * 1024 * 1024))
+        assertEquals("128 MB", RecentCard.formatSize(128L * 1024 * 1024))
+
+        // Standard ECC sizes (528 bytes/page)
+        assertEquals("8 MB", RecentCard.formatSize(8L * 2048 * 528))
+        assertEquals("16 MB", RecentCard.formatSize(16L * 2048 * 528))
+        assertEquals("32 MB", RecentCard.formatSize(32L * 2048 * 528))
+        assertEquals("64 MB", RecentCard.formatSize(64L * 2048 * 528))
+        assertEquals("128 MB", RecentCard.formatSize(128L * 2048 * 528))
+
+        // Off-by-a-bit sizes or 66MB/33MB/132MB should round to closest standard PS2 size
+        assertEquals("64 MB", RecentCard.formatSize(66L * 1024 * 1024))
+        assertEquals("32 MB", RecentCard.formatSize(33L * 1024 * 1024))
+        assertEquals("128 MB", RecentCard.formatSize(132L * 1024 * 1024))
+
+        // formattedSize property on RecentCard instance
+        val recentCard66 = RecentCard(
+            uriString = "content://test/card.ps2",
+            fileName = "card.ps2",
+            sizeBytes = 66L * 1024 * 1024
+        )
+        assertEquals("64 MB", recentCard66.formattedSize)
     }
 }
 
