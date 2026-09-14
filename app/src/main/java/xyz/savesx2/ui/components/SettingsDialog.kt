@@ -45,7 +45,7 @@ fun SettingsDialog(
     hasRecentCards: Boolean,
     onClearRecentCards: () -> Unit,
     onDismiss: () -> Unit,
-    versionName: String = "1.6.0"
+    versionName: String = "1.6.1"
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -181,29 +181,6 @@ fun SettingsDialog(
                             )
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // App Version Footer
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "SAVESX2",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "v$versionName",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
                 }
             }
         },

@@ -457,9 +457,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val appVersion = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.0"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.1"
         } catch (_: Exception) {
-            "1.6.0"
+            "1.6.1"
         }
         viewModel.checkUpdate(appVersion)
 
@@ -664,11 +664,11 @@ class MainActivity : ComponentActivity() {
                                     onOpenSettings = { viewModel.setShowSettingsDialog(true) },
                                     updateStatus = updateStatus,
                                     onCheckUpdate = {
-                                        val version = try {
-                                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.0"
-                                        } catch (e: Exception) {
-                                            "1.6.0"
-                                        }
+                                         val version = try {
+                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.1"
+                                         } catch (e: Exception) {
+                                             "1.6.1"
+                                         }
                                         viewModel.checkUpdate(version)
                                     }
                                 )
@@ -892,9 +892,9 @@ class MainActivity : ComponentActivity() {
                         onClearRecentCards = { viewModel.clearRecentCards(this@MainActivity) },
                         onDismiss = { viewModel.setShowSettingsDialog(false) },
                         versionName = try {
-                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.0"
+                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.1"
                         } catch (_: Exception) {
-                            "1.6.0"
+                            "1.6.1"
                         }
                     )
                 }

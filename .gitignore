@@ -11,6 +11,7 @@
 *.aab
 *.ps2
 *.txt
+!changelog_format.txt
 Screenshot*
 savefile_test*
 saves_test*
