@@ -7,9 +7,16 @@ import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
 import android.opengl.Matrix
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +47,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,8 +91,14 @@ fun Icon3dViewerDialog(
     session: Ps2Icon3dSession,
     onDismiss: () -> Unit
 ) {
+    var isModelDragged by remember { mutableStateOf(false) }
+
     val glRenderer = remember(session) {
-        Ps2IconGlRenderer(session.mesh, session.iconSys)
+        Ps2IconGlRenderer(session.mesh, session.iconSys).apply {
+            onResetFinished = {
+                isModelDragged = false
+            }
+        }
     }
 
     Dialog(
@@ -138,15 +154,19 @@ fun Icon3dViewerDialog(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (session.subtitle.isNotBlank()) {
-                                Text(
-                                    text = session.subtitle,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                            val statsText = "${session.mesh.vertexCount / 3} Polys • ${session.mesh.vertexCount} Verts"
+                            val subtitleText = if (session.subtitle.isNotBlank()) {
+                                "${session.subtitle} • $statsText"
+                            } else {
+                                statsText
                             }
+                            Text(
+                                text = subtitleText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
 
@@ -171,96 +191,94 @@ fun Icon3dViewerDialog(
                 ) {
                     AndroidView(
                         factory = { ctx ->
-                            createGlSurfaceView(ctx, glRenderer)
+                            createGlSurfaceView(
+                                context = ctx,
+                                renderer = glRenderer,
+                                onModelDragged = { dragged -> isModelDragged = dragged }
+                            )
                         },
                         modifier = Modifier.size(240.dp)
                     )
 
-                    // Reset button overlay
-                    IconButton(
-                        onClick = {
-                            glRenderer.resetView()
-                        },
+                    // Reset button overlay - only shown when model is dragged
+                    AnimatedVisibility(
+                        visible = isModelDragged,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut(),
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(8.dp)
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)),
-                        colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Reset Angle",
-                            modifier = Modifier.size(16.dp)
-                        )
+                        IconButton(
+                            onClick = {
+                                glRenderer.resetView()
+                                isModelDragged = false
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)),
+                            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Reset Angle",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                Text(
-                    text = "Drag to rotate • Pinch to zoom",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Stats and Controls Bar
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    modifier = Modifier.fillMaxWidth()
+                // Bottom Controls Row: gesture hint on left, compact zoom controls on right
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "OpenGL ES 2.0",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "${session.mesh.vertexCount / 3} Polys • ${session.mesh.vertexCount} Verts",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
+                    Text(
+                        text = "Drag to rotate • Pinch to zoom",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
 
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
-                                onClick = { glRenderer.adjustZoom(-0.15f) },
-                                modifier = Modifier.size(32.dp)
+                                onClick = {
+                                    glRenderer.adjustZoom(-0.15f)
+                                    isModelDragged = true
+                                },
+                                modifier = Modifier.size(30.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Remove,
                                     contentDescription = "Zoom Out",
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                             }
-
                             IconButton(
-                                onClick = { glRenderer.adjustZoom(0.15f) },
-                                modifier = Modifier.size(32.dp)
+                                onClick = {
+                                    glRenderer.adjustZoom(0.15f)
+                                    isModelDragged = true
+                                },
+                                modifier = Modifier.size(30.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
                                     contentDescription = "Zoom In",
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Close Button
                 TextButton(
@@ -277,7 +295,8 @@ fun Icon3dViewerDialog(
 @SuppressLint("ClickableViewAccessibility")
 private fun createGlSurfaceView(
     context: android.content.Context,
-    renderer: Ps2IconGlRenderer
+    renderer: Ps2IconGlRenderer,
+    onModelDragged: (Boolean) -> Unit
 ): GLSurfaceView {
     return GLSurfaceView(context).apply {
         setEGLContextClientVersion(2)
@@ -296,6 +315,7 @@ private fun createGlSurfaceView(
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
                     renderer.zoomScale = (renderer.zoomScale * detector.scaleFactor).coerceIn(0.5f, 2.5f)
                     renderer.lastTouchTimeMs = SystemClock.uptimeMillis()
+                    onModelDragged(true)
                     return true
                 }
             }
@@ -320,6 +340,9 @@ private fun createGlSurfaceView(
                     if (!scaleDetector.isInProgress && event.pointerCount == 1) {
                         val dx = event.x - prevX
                         val dy = event.y - prevY
+                        if (abs(dx) > 1f || abs(dy) > 1f) {
+                            onModelDragged(true)
+                        }
                         renderer.yawDeg = (renderer.yawDeg + dx * 0.6f) % 360f
                         renderer.pitchDeg = (renderer.pitchDeg + dy * 0.6f).coerceIn(-85f, 85f)
                     }
@@ -350,6 +373,9 @@ class Ps2IconGlRenderer(
     @Volatile var isTouching: Boolean = false
     @Volatile var isResetting: Boolean = false
     @Volatile var lastTouchTimeMs: Long = 0L
+
+    var onResetFinished: (() -> Unit)? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var lastFrameTimeMs: Long = 0L
     private var program: Int = 0
@@ -480,6 +506,7 @@ class Ps2IconGlRenderer(
                 zoomScale = DEFAULT_ZOOM
                 isResetting = false
                 lastTouchTimeMs = 0L
+                mainHandler.post { onResetFinished?.invoke() }
             }
         } else if (!isTouching) {
             val idleMs = now - lastTouchTimeMs
@@ -490,6 +517,10 @@ class Ps2IconGlRenderer(
                 zoomScale += (DEFAULT_ZOOM - zoomScale) * minOf(1.0f, 4.0f * dt)
                 // Continuously rotate to the left
                 yawDeg = (yawDeg - ROTATION_SPEED_DEG_PER_SEC * dt) % 360f
+
+                if (abs(DEFAULT_PITCH_DEG - pitchDeg) < 0.1f && abs(DEFAULT_ZOOM - zoomScale) < 0.02f) {
+                    mainHandler.post { onResetFinished?.invoke() }
+                }
             }
         }
 
