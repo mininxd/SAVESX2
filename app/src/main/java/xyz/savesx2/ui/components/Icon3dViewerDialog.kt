@@ -44,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,6 +57,7 @@ import xyz.savesx2.core.Ps2IconSys
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import kotlin.math.abs
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
@@ -164,19 +164,9 @@ fun Icon3dViewerDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Interactive OpenGL Canvas
+                // Interactive OpenGL Canvas (transparent floating 3D icon)
                 Box(
-                    modifier = Modifier
-                        .size(240.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    Color(0xFF1E2638),
-                                    Color(0xFF0F131D)
-                                )
-                            )
-                        ),
+                    modifier = Modifier.size(240.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     AndroidView(
@@ -196,8 +186,8 @@ fun Icon3dViewerDialog(
                             .padding(8.dp)
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.45f)),
-                        colors = IconButtonDefaults.iconButtonColors(contentColor = Color.White)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)),
+                        colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -317,16 +307,21 @@ private fun createGlSurfaceView(
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    renderer.isResetting = false
                     renderer.isTouching = true
                     prevX = event.x
                     prevY = event.y
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    renderer.isResetting = false
+                    renderer.isTouching = true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (!scaleDetector.isInProgress && event.pointerCount == 1) {
                         val dx = event.x - prevX
                         val dy = event.y - prevY
                         renderer.yawDeg = (renderer.yawDeg + dx * 0.6f) % 360f
-                        renderer.pitchDeg = (renderer.pitchDeg - dy * 0.6f).coerceIn(-85f, 85f)
+                        renderer.pitchDeg = (renderer.pitchDeg + dy * 0.6f).coerceIn(-85f, 85f)
                     }
                     prevX = event.x
                     prevY = event.y
@@ -353,6 +348,7 @@ class Ps2IconGlRenderer(
     @Volatile var yawDeg: Float = DEFAULT_YAW_DEG
     @Volatile var zoomScale: Float = DEFAULT_ZOOM
     @Volatile var isTouching: Boolean = false
+    @Volatile var isResetting: Boolean = false
     @Volatile var lastTouchTimeMs: Long = 0L
 
     private var lastFrameTimeMs: Long = 0L
@@ -378,11 +374,8 @@ class Ps2IconGlRenderer(
     private var vertexBuffer: FloatBuffer? = null
 
     fun resetView() {
-        pitchDeg = DEFAULT_PITCH_DEG
-        yawDeg = DEFAULT_YAW_DEG
-        zoomScale = DEFAULT_ZOOM
-        lastTouchTimeMs = 0L
         isTouching = false
+        isResetting = true
     }
 
     fun adjustZoom(delta: Float) {
@@ -471,7 +464,24 @@ class Ps2IconGlRenderer(
         lastFrameTimeMs = now
 
         // Animation update
-        if (!isTouching) {
+        if (isResetting) {
+            val ease = minOf(1.0f, 6.0f * dt)
+            val yawDiff = ((DEFAULT_YAW_DEG - yawDeg + 180f) % 360f + 360f) % 360f - 180f
+            yawDeg += yawDiff * ease
+            pitchDeg += (DEFAULT_PITCH_DEG - pitchDeg) * ease
+            zoomScale += (DEFAULT_ZOOM - zoomScale) * ease
+
+            if (abs(yawDiff) < 0.5f &&
+                abs(DEFAULT_PITCH_DEG - pitchDeg) < 0.5f &&
+                abs(DEFAULT_ZOOM - zoomScale) < 0.02f
+            ) {
+                pitchDeg = DEFAULT_PITCH_DEG
+                yawDeg = DEFAULT_YAW_DEG
+                zoomScale = DEFAULT_ZOOM
+                isResetting = false
+                lastTouchTimeMs = 0L
+            }
+        } else if (!isTouching) {
             val idleMs = now - lastTouchTimeMs
             if (idleMs >= IDLE_RESET_DELAY_MS) {
                 // Smooth critically-damped spring transition for pitch back to default (15°)
