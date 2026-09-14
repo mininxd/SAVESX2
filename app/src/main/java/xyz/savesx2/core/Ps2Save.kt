@@ -24,7 +24,8 @@ data class Ps2Save(
     val files: List<Ps2SaveFile> = emptyList(),
     val iconSys: Ps2IconSys? = null,
     val iconBitmap: Bitmap? = null,
-    val iconImageBitmap: ImageBitmap? = iconBitmap?.asImageBitmap()
+    val iconImageBitmap: ImageBitmap? = iconBitmap?.asImageBitmap(),
+    val region: Ps2Region = Ps2Region.detect(directoryName, title)
 ) {
     val sizeInKb: Long = (sizeInBytes + 1023) / 1024
     val sizeInMb: Double = sizeInBytes / (1024.0 * 1024.0)
@@ -34,7 +35,7 @@ data class Ps2Save(
 
     val fullDisplayTitle: String = if (subtitle.isNotBlank()) "$displayTitle • $subtitle" else displayTitle
     val modifiedDateOnly: String = modifiedDate.substringBefore(' ')
-    val searchKey: String = "${displayTitle.lowercase()} ${directoryName.lowercase()} ${subtitle.lowercase()}"
+    val searchKey: String = "${displayTitle.lowercase()} ${directoryName.lowercase()} ${subtitle.lowercase()} ${region.code.lowercase()} ${region.displayName.lowercase()}"
     val sizeText: String = "$sizeInKb KB"
     val firstInitial: String = (displayTitle.firstOrNull() ?: 'P').uppercase()
 

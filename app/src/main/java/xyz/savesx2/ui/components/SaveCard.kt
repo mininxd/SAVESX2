@@ -143,6 +143,10 @@ fun SaveCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (save.region != xyz.savesx2.core.Ps2Region.UNKNOWN) {
+                        RegionBadge(region = save.region)
+                    }
+
                     Text(
                         text = save.directoryName,
                         style = MaterialTheme.typography.labelSmall,
