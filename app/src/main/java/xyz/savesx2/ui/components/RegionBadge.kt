@@ -2,7 +2,6 @@ package xyz.savesx2.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -18,7 +17,7 @@ import androidx.compose.ui.unit.sp
 import xyz.savesx2.core.Ps2Region
 
 /**
- * Compact, stylish badge displaying a savegame's regional origin (e.g. 🇺🇸 US, 🇪🇺 EU, 🇯🇵 JP).
+ * Compact text badge displaying a savegame's regional origin (e.g. US, EU, JP, ASIA).
  */
 @Composable
 fun RegionBadge(
@@ -28,11 +27,7 @@ fun RegionBadge(
 ) {
     if (region == Ps2Region.UNKNOWN) return
 
-    val labelText = if (showFullLabel) {
-        "${region.flagEmoji} ${region.displayName}"
-    } else {
-        "${region.flagEmoji} ${region.code}"
-    }
+    val labelText = if (showFullLabel) region.displayName else region.code
 
     Box(
         modifier = modifier
@@ -46,7 +41,7 @@ fun RegionBadge(
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 fontSize = 10.sp,
-                letterSpacing = 0.3.sp
+                letterSpacing = 0.4.sp
             ),
             color = Color(region.badgeTextColor),
             maxLines = 1

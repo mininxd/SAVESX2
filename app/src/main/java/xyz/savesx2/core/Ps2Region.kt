@@ -7,63 +7,54 @@ package xyz.savesx2.core
 enum class Ps2Region(
     val code: String,
     val displayName: String,
-    val flagEmoji: String,
     val badgeColor: Long,
     val badgeTextColor: Long
 ) {
     US(
         code = "US",
         displayName = "North America (NTSC-U)",
-        flagEmoji = "🇺🇸",
         badgeColor = 0xFF12283E,      // Deep Navy
         badgeTextColor = 0xFF90CAF9   // Soft Blue
     ),
     EU(
         code = "EU",
         displayName = "Europe (PAL)",
-        flagEmoji = "🇪🇺",
         badgeColor = 0xFF143322,      // Deep Forest Green
         badgeTextColor = 0xFFA5D6A7   // Soft Green
     ),
     JP(
         code = "JP",
         displayName = "Japan (NTSC-J)",
-        flagEmoji = "🇯🇵",
         badgeColor = 0xFF3D1621,      // Deep Crimson
         badgeTextColor = 0xFFEF9A9A   // Soft Red
     ),
     ASIA(
         code = "ASIA",
         displayName = "Asia",
-        flagEmoji = "🌏",
         badgeColor = 0xFF3D2C11,      // Deep Amber
         badgeTextColor = 0xFFFFCC80   // Soft Gold
     ),
     KR(
         code = "KR",
         displayName = "Korea (NTSC-K)",
-        flagEmoji = "🇰🇷",
         badgeColor = 0xFF2A193D,      // Deep Violet
         badgeTextColor = 0xFFCE93D8   // Soft Purple
     ),
     CN(
         code = "CN",
         displayName = "China (NTSC-C)",
-        flagEmoji = "🇨🇳",
         badgeColor = 0xFF3D1313,      // Deep Maroon
         badgeTextColor = 0xFFFFAB91   // Soft Orange/Coral
     ),
     SYSTEM(
         code = "SYS",
         displayName = "System / Utility",
-        flagEmoji = "⚙️",
         badgeColor = 0xFF263238,      // Deep Slate
         badgeTextColor = 0xFFCFD8DC   // Soft Grey
     ),
     UNKNOWN(
         code = "--",
         displayName = "Custom / Other",
-        flagEmoji = "🌐",
         badgeColor = 0xFF212121,
         badgeTextColor = 0xFF9E9E9E
     );

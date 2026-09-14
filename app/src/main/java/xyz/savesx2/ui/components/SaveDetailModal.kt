@@ -312,7 +312,7 @@ fun SaveDetailModal(
                                         color = MaterialTheme.colorScheme.outline
                                     )
                                     Text(
-                                        text = "${save.region.flagEmoji} ${save.region.displayName} (${save.region.code})",
+                                        text = "${save.region.displayName} (${save.region.code})",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold
                                     )
