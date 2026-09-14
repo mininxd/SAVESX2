@@ -832,7 +832,7 @@ class Ps2Memcard private constructor(
      * Accurately sets '.' and '..' entries, dirEntry slot index, cluster pointers,
      * and DF_0400 flags expected by the PS2 BIOS browser.
      */
-    fun makeDir(dirName: String): Long {
+    fun makeDir(dirName: String, template: Ps2DirectoryEntry? = null): Long {
         if (!isFormatted) return 0xFFFFFFFFL
         val rootCluster = if (superBlock.rootdirCluster >= allocOffset) {
             superBlock.rootdirCluster - allocOffset
@@ -851,16 +851,20 @@ class Ps2Memcard private constructor(
 
         val slotForNewDir = parentEntries.size
         val now = Ps2Timestamp.now()
+        val created = template?.created ?: now
+        val modified = template?.modified ?: now
+        val mode = template?.mode ?: (Ps2DirectoryEntry.DF_DIRECTORY or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_0400)
+        val attr = template?.attr ?: 0L
 
         val newDirEntries = mutableListOf<Ps2DirectoryEntry>()
         val dotEntry = Ps2DirectoryEntry(
-            mode = Ps2DirectoryEntry.DF_DIRECTORY or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_0400,
+            mode = mode,
             length = 2,
-            created = now,
+            created = created,
             cluster = rootCluster,
             dirEntry = slotForNewDir.toLong(),
-            modified = now,
-            attr = 0,
+            modified = modified,
+            attr = attr,
             name = "."
         )
         newDirEntries.add(dotEntry)
@@ -883,13 +887,13 @@ class Ps2Memcard private constructor(
         }
 
         val newDirEntry = Ps2DirectoryEntry(
-            mode = Ps2DirectoryEntry.DF_DIRECTORY or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_0400,
+            mode = mode,
             length = 2,
-            created = now,
+            created = created,
             cluster = dirCluster,
             dirEntry = 0,
-            modified = now,
-            attr = 0,
+            modified = modified,
+            attr = attr,
             name = dirName
         )
 
@@ -909,7 +913,13 @@ class Ps2Memcard private constructor(
     /**
      * Writes a file into a directory matching myMCpp's writeFile.
      */
-    fun writeFile(dirCluster: Long, fileName: String, data: ByteArray, entryTemplate: Ps2DirectoryEntry? = null): Boolean {
+    fun writeFile(
+        dirCluster: Long,
+        fileName: String,
+        data: ByteArray,
+        entryTemplate: Ps2DirectoryEntry? = null,
+        preserveExactMode: Boolean = false
+    ): Boolean {
         if (!isFormatted) return false
         val clustersNeeded = if (data.isNotEmpty()) (data.size + clusterSize - 1) / clusterSize else 0
         val fileClusters = if (clustersNeeded > 0) {
@@ -940,9 +950,13 @@ class Ps2Memcard private constructor(
 
         val now = Ps2Timestamp.now()
         val templateMode = entryTemplate?.mode ?: (Ps2DirectoryEntry.DF_FILE or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_0400)
-        // Ensure standard PS2 file attributes: DF_FILE | DF_EXISTS | DF_RWX | DF_0400, clear DF_PROTECTED so BIOS has full permit to delete/rewrite
-        val fileMode = (templateMode and Ps2DirectoryEntry.DF_PROTECTED.inv()) or
-                (Ps2DirectoryEntry.DF_FILE or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_0400)
+        val fileMode = if (preserveExactMode && entryTemplate != null) {
+            entryTemplate.mode
+        } else {
+            // Ensure standard PS2 file attributes: DF_FILE | DF_EXISTS | DF_RWX | DF_0400, clear DF_PROTECTED so BIOS has full permit to delete/rewrite
+            (templateMode and Ps2DirectoryEntry.DF_PROTECTED.inv()) or
+                    (Ps2DirectoryEntry.DF_FILE or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_0400)
+        }
 
         val fileEntry = Ps2DirectoryEntry(
             mode = fileMode,
@@ -950,7 +964,7 @@ class Ps2Memcard private constructor(
             created = entryTemplate?.created ?: now,
             cluster = if (fileClusters.isEmpty()) 0xFFFFFFFFL else fileClusters[0],
             dirEntry = 0,
-            modified = if (existingSlot != -1) now else (entryTemplate?.modified ?: now),
+            modified = if (existingSlot != -1 && !preserveExactMode) now else (entryTemplate?.modified ?: now),
             attr = entryTemplate?.attr ?: 0L,
             name = if (existingSlot != -1) parentEntries[existingSlot].name else fileName
         )
@@ -1354,6 +1368,83 @@ class Ps2Memcard private constructor(
         } else {
             rawData.copyOf()
         }
+    }
+
+    /**
+     * Resizes the memory card to a larger capacity (16MB, 32MB, 64MB, or 128MB).
+     *
+     * For unformatted cards: expands the raw flash container filled with 0xFF and updates the superblock.
+     * For formatted cards: initializes a new valid PS2 filesystem with expanded FAT/cluster tables,
+     * and migrates all existing saves, directories, and files preserving exact modes, timestamps,
+     * and attributes without data loss.
+     *
+     * @param newSizeMb Target card capacity in MB (must be strictly greater than current capacity).
+     * @return true if resize succeeded, false otherwise.
+     */
+    fun resize(newSizeMb: Int): Boolean {
+        val currentSizeMb = (totalCapacityMb + 0.5).toInt()
+        if (newSizeMb <= currentSizeMb) {
+            return false
+        }
+        if (newSizeMb !in listOf(16, 32, 64, 128)) {
+            return false
+        }
+
+        if (!isFormatted) {
+            val newRaw = MemcardFormatter.createUnformatted(newSizeMb, hasEcc)
+            val newClusters = (newSizeMb * 1024L)
+            this.rawData = newRaw
+            this.superBlock = Ps2SuperBlock.createUnformatted(newClusters, hasEcc)
+            invalidateSavesCache()
+            return true
+        }
+
+        // Card is formatted: format new card image and migrate all data
+        val newRaw = MemcardFormatter.format(newSizeMb, hasEcc)
+        val newCard = Ps2Memcard.open(newRaw) ?: return false
+
+        // Traverse root directory of current card
+        val rootCluster = if (superBlock.rootdirCluster >= allocOffset) {
+            superBlock.rootdirCluster - allocOffset
+        } else {
+            superBlock.rootdirCluster
+        }
+        val rootEntries = readDirents(rootCluster)
+
+        for (entry in rootEntries) {
+            val name = entry.name.trim().trimEnd('\u0000')
+            if (name == "." || name == ".." || !entry.isExists || name.isBlank()) continue
+
+            if (entry.isDirectory) {
+                // Subdirectory (e.g., PS2 save directory)
+                val newDirCluster = newCard.makeDir(name, template = entry)
+                if (newDirCluster == 0xFFFFFFFFL) return false
+
+                val subEntries = readDirents(entry.cluster)
+                for (subEntry in subEntries) {
+                    val subName = subEntry.name.trim().trimEnd('\u0000')
+                    if (subName == "." || subName == ".." || !subEntry.isExists || subName.isBlank()) continue
+
+                    val fileData = readFile(subEntry.cluster, subEntry.length)
+                    val success = newCard.writeFile(newDirCluster, subName, fileData, entryTemplate = subEntry, preserveExactMode = true)
+                    if (!success) return false
+                }
+            } else {
+                // Loose file in root directory (e.g. PS1 save)
+                val fileData = readFile(entry.cluster, entry.length)
+                val success = newCard.writeFile(0L, name, fileData, entryTemplate = entry, preserveExactMode = true)
+                if (!success) return false
+            }
+        }
+
+        newCard.writeFatToCard()
+
+        // Swap internal state
+        this.rawData = newCard.rawData
+        this.superBlock = newCard.superBlock
+        this.fatTable = newCard.fatTable
+        invalidateSavesCache()
+        return true
     }
 
     companion object {

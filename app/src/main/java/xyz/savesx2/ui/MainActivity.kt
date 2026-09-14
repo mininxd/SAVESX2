@@ -67,6 +67,8 @@ import xyz.savesx2.ui.components.CreateCardDialog
 import xyz.savesx2.ui.components.EditTimestampsDialog
 import xyz.savesx2.ui.components.FormatCardDialog
 import xyz.savesx2.ui.components.HexViewerDialog
+import xyz.savesx2.ui.components.Icon3dViewerDialog
+import xyz.savesx2.ui.components.ResizeCardDialog
 import xyz.savesx2.ui.components.SaveDetailModal
 import xyz.savesx2.ui.components.SettingsDialog
 import xyz.savesx2.ui.components.SwipeDismissNotification
@@ -473,6 +475,8 @@ class MainActivity : ComponentActivity() {
                 val showCreateDialog by viewModel.showCreateDialog.collectAsState()
                 val showFormatDialog by viewModel.showFormatDialog.collectAsState()
                 val showStatsDialog by viewModel.showStatsDialog.collectAsState()
+                val showResizeDialog by viewModel.showResizeDialog.collectAsState()
+                val icon3dSession by viewModel.icon3dSession.collectAsState()
                 val hexSession by viewModel.hexEditorSession.collectAsState()
                 val snackbarMessage by viewModel.snackbarMessage.collectAsState()
                 val hasUnsavedChanges by viewModel.hasUnsavedChanges.collectAsState()
@@ -612,6 +616,7 @@ class MainActivity : ComponentActivity() {
                             onSaveCardAs = { triggerSaveCardAs() },
                             onFormatCard = { viewModel.setShowFormatDialog(true) },
                             onShowStats = { viewModel.setShowStatsDialog(true) },
+                            onResizeCard = { viewModel.setShowResizeDialog(true) },
                             onOpenRawHex = {
                                 (uiState as? CardUiState.Loaded)?.let { loaded ->
                                     viewModel.openHexEditor(
@@ -802,6 +807,9 @@ class MainActivity : ComponentActivity() {
                                 saveName = save.directoryName,
                                 fileName = file.name
                             )
+                        },
+                        onView3dIcon = {
+                            viewModel.open3dIconViewer(save)
                         }
                     )
                 }
@@ -845,6 +853,28 @@ class MainActivity : ComponentActivity() {
                             viewModel.setShowFormatDialog(false)
                             viewModel.formatCurrentCard()
                         }
+                    )
+                }
+
+                if (showResizeDialog) {
+                    (uiState as? CardUiState.Loaded)?.let { loaded ->
+                        val currentMb = (loaded.memcard.totalCapacityMb + 0.5).toInt()
+                        ResizeCardDialog(
+                            cardName = loaded.cardName,
+                            currentCapacityMb = currentMb,
+                            onDismiss = { viewModel.setShowResizeDialog(false) },
+                            onConfirmResize = { targetMb ->
+                                viewModel.setShowResizeDialog(false)
+                                viewModel.resizeCurrentCard(targetMb)
+                            }
+                        )
+                    }
+                }
+
+                icon3dSession?.let { session ->
+                    Icon3dViewerDialog(
+                        session = session,
+                        onDismiss = { viewModel.close3dIconViewer() }
                     )
                 }
 

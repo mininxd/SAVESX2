@@ -280,7 +280,7 @@ object Ps2IconDecoder {
         }
     }
 
-    private class ParsedIconMesh(
+    class ParsedIconMesh(
         val vertexCount: Int,
         val posX: FloatArray,
         val posY: FloatArray,
@@ -297,10 +297,11 @@ object Ps2IconDecoder {
         val centerX: Float,
         val centerY: Float,
         val centerZ: Float,
-        val scale: Float
+        val scale: Float,
+        val vertexBuffer: java.nio.FloatBuffer? = null
     )
 
-    private fun parseIconMesh(icnData: ByteArray): ParsedIconMesh? {
+    fun parseIconMesh(icnData: ByteArray): ParsedIconMesh? {
         if (icnData.size < 32) return null
         val buf = ByteBuffer.wrap(icnData).order(ByteOrder.LITTLE_ENDIAN)
 
@@ -483,6 +484,32 @@ object Ps2IconDecoder {
         val maxExtent = maxOf(extentX, maxOf(extentY, extentZ))
         val scale = if (maxExtent > 0.001f) (3.2f / maxExtent) else 1.0f
 
+        val vertexBuffer = try {
+            ByteBuffer.allocateDirect(vertexCount * 11 * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer().apply {
+                    for (i in 0 until vertexCount) {
+                        put(posX[i])
+                        put(posY[i])
+                        put(posZ[i])
+
+                        put(normX[i])
+                        put(normY[i])
+                        put(normZ[i])
+
+                        put(uvU[i])
+                        put(uvV[i])
+
+                        put(colR[i])
+                        put(colG[i])
+                        put(colB[i])
+                    }
+                    position(0)
+                }
+        } catch (_: Throwable) {
+            null
+        }
+
         return ParsedIconMesh(
             vertexCount = vertexCount,
             posX = posX,
@@ -500,24 +527,50 @@ object Ps2IconDecoder {
             centerX = centerX,
             centerY = centerY,
             centerZ = centerZ,
-            scale = scale
+            scale = scale,
+            vertexBuffer = vertexBuffer
         )
     }
 
-    private fun render3dIconOpenGl(mesh: ParsedIconMesh, iconSys: Ps2IconSys?): Bitmap? {
-        return OpenGlIconRenderer.render(mesh, iconSys)
+    private fun render3dIconOpenGl(
+        mesh: ParsedIconMesh,
+        iconSys: Ps2IconSys?,
+        pitchDeg: Float = 14.9f,
+        yawDeg: Float = -25.2f,
+        scaleMultiplier: Float = 1.0f
+    ): Bitmap? {
+        return OpenGlIconRenderer.render(mesh, iconSys, pitchDeg, yawDeg, scaleMultiplier)
+    }
+
+    /**
+     * Public interactive 3D rendering API. Renders with arbitrary pitch and yaw angles on-demand.
+     */
+    fun render3dIconMesh(
+        mesh: ParsedIconMesh,
+        iconSys: Ps2IconSys?,
+        pitchDeg: Float = 14.9f,
+        yawDeg: Float = -25.2f,
+        scaleMultiplier: Float = 1.0f
+    ): Bitmap? {
+        return (try {
+            render3dIconOpenGl(mesh, iconSys, pitchDeg, yawDeg, scaleMultiplier)
+        } catch (_: Throwable) {
+            null
+        }) ?: render3dIconSoftware(mesh, iconSys, pitchDeg, yawDeg, scaleMultiplier)
     }
 
     private fun render3dIcon(icnData: ByteArray, iconSys: Ps2IconSys?): Bitmap? {
         val mesh = parseIconMesh(icnData) ?: return null
-        return (try {
-            render3dIconOpenGl(mesh, iconSys)
-        } catch (_: Throwable) {
-            null
-        }) ?: render3dIconSoftware(mesh, iconSys)
+        return render3dIconMesh(mesh, iconSys)
     }
 
-    private fun render3dIconSoftware(mesh: ParsedIconMesh, iconSys: Ps2IconSys?): Bitmap? {
+    fun render3dIconSoftware(
+        mesh: ParsedIconMesh,
+        iconSys: Ps2IconSys?,
+        pitchDeg: Float = 14.9f,
+        yawDeg: Float = -25.2f,
+        scaleMultiplier: Float = 1.0f
+    ): Bitmap? {
         val vertexCount = mesh.vertexCount
         val posX = mesh.posX
         val posY = mesh.posY
@@ -534,11 +587,11 @@ object Ps2IconDecoder {
         val centerX = mesh.centerX
         val centerY = mesh.centerY
         val centerZ = mesh.centerZ
-        val scale = mesh.scale
+        val scale = mesh.scale * scaleMultiplier
 
-        // PS2 memory card standard 3/4 viewing angle
-        val pitch = 0.26f // ~15 degrees down
-        val yaw = -0.44f  // ~-25 degrees turn
+        // Dynamic viewing angles (default ~15 deg pitch down, ~-25 deg yaw turn)
+        val pitch = pitchDeg * (Math.PI.toFloat() / 180f)
+        val yaw = yawDeg * (Math.PI.toFloat() / 180f)
         val cosPitch = cos(pitch)
         val sinPitch = sin(pitch)
         val cosYaw = cos(yaw)
@@ -850,6 +903,8 @@ object Ps2IconDecoder {
             }
         """
 
+        private var lastUploadedMeshHash: Int = -1
+
         fun destroy() {
             try {
                 if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
@@ -875,6 +930,7 @@ object Ps2IconDecoder {
             } finally {
                 isInitialized = false
                 isFailed = false
+                lastUploadedMeshHash = -1
             }
         }
 
@@ -1032,7 +1088,13 @@ object Ps2IconDecoder {
             return prog
         }
 
-        fun render(mesh: ParsedIconMesh, iconSys: Ps2IconSys?): Bitmap? {
+        fun render(
+            mesh: ParsedIconMesh,
+            iconSys: Ps2IconSys?,
+            pitchDeg: Float = 14.9f,
+            yawDeg: Float = -25.2f,
+            scaleMultiplier: Float = 1.0f
+        ): Bitmap? {
             synchronized(lock) {
                 if (isFailed) return null
                 if (!isInitialized) {
@@ -1061,24 +1123,26 @@ object Ps2IconDecoder {
 
                     GLES20.glUseProgram(program)
 
-                    // Upload texture
-                    val texBitmap = Bitmap.createBitmap(TEX_WIDTH, TEX_HEIGHT, Bitmap.Config.ARGB_8888)
-                    texBitmap.setPixels(mesh.texPixels, 0, TEX_WIDTH, 0, 0, TEX_WIDTH, TEX_HEIGHT)
+                    // Upload texture only when mesh texture changes
+                    val meshHash = mesh.texPixels.contentHashCode()
                     GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
                     GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
-                    GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, texBitmap, 0)
-                    texBitmap.recycle()
+                    if (lastUploadedMeshHash != meshHash) {
+                        val texBitmap = Bitmap.createBitmap(TEX_WIDTH, TEX_HEIGHT, Bitmap.Config.ARGB_8888)
+                        texBitmap.setPixels(mesh.texPixels, 0, TEX_WIDTH, 0, 0, TEX_WIDTH, TEX_HEIGHT)
+                        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, texBitmap, 0)
+                        texBitmap.recycle()
+                        lastUploadedMeshHash = meshHash
+                    }
                     GLES20.glUniform1i(uTextureHandle, 0)
 
-                    // Model Matrix
-                    val pitchDeg = 0.26f * (180f / Math.PI.toFloat())
-                    val yawDeg = -0.44f * (180f / Math.PI.toFloat())
-
+                    // Model Matrix with dynamic touch rotation and scaling
                     val modelMatrix = FloatArray(16)
                     Matrix.setIdentityM(modelMatrix, 0)
                     Matrix.rotateM(modelMatrix, 0, pitchDeg, 1f, 0f, 0f)
                     Matrix.rotateM(modelMatrix, 0, yawDeg, 0f, 1f, 0f)
-                    Matrix.scaleM(modelMatrix, 0, mesh.scale, mesh.scale, mesh.scale)
+                    val totalScale = mesh.scale * scaleMultiplier
+                    Matrix.scaleM(modelMatrix, 0, totalScale, totalScale, totalScale)
                     Matrix.translateM(modelMatrix, 0, -mesh.centerX, -mesh.centerY, -mesh.centerZ)
 
                     // View Matrix (camera at 5.0 distance looking at origin)
@@ -1109,27 +1173,30 @@ object Ps2IconDecoder {
                     val ambB = iconSys?.ambientB?.coerceIn(0.4f, 0.8f) ?: 0.55f
                     GLES20.glUniform3f(uAmbientHandle, ambR, ambG, ambB)
 
-                    // Upload vertex data
+                    // Vertex data: reuse pre-packed vertexBuffer from mesh without re-allocating
                     val vertexCount = mesh.vertexCount
-                    val vertexBuffer = ByteBuffer.allocateDirect(vertexCount * 11 * 4)
-                        .order(ByteOrder.nativeOrder())
-                        .asFloatBuffer()
+                    val vertexBuffer = mesh.vertexBuffer ?: run {
+                        val buf = ByteBuffer.allocateDirect(vertexCount * 11 * 4)
+                            .order(ByteOrder.nativeOrder())
+                            .asFloatBuffer()
+                        for (i in 0 until vertexCount) {
+                            buf.put(mesh.posX[i])
+                            buf.put(mesh.posY[i])
+                            buf.put(mesh.posZ[i])
 
-                    for (i in 0 until vertexCount) {
-                        vertexBuffer.put(mesh.posX[i])
-                        vertexBuffer.put(mesh.posY[i])
-                        vertexBuffer.put(mesh.posZ[i])
+                            buf.put(mesh.normX[i])
+                            buf.put(mesh.normY[i])
+                            buf.put(mesh.normZ[i])
 
-                        vertexBuffer.put(mesh.normX[i])
-                        vertexBuffer.put(mesh.normY[i])
-                        vertexBuffer.put(mesh.normZ[i])
+                            buf.put(mesh.uvU[i])
+                            buf.put(mesh.uvV[i])
 
-                        vertexBuffer.put(mesh.uvU[i])
-                        vertexBuffer.put(mesh.uvV[i])
-
-                        vertexBuffer.put(mesh.colR[i])
-                        vertexBuffer.put(mesh.colG[i])
-                        vertexBuffer.put(mesh.colB[i])
+                            buf.put(mesh.colR[i])
+                            buf.put(mesh.colG[i])
+                            buf.put(mesh.colB[i])
+                        }
+                        buf.position(0)
+                        buf
                     }
 
                     val stride = 11 * 4

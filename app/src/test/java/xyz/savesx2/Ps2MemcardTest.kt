@@ -934,6 +934,76 @@ class Ps2MemcardTest {
         )
         assertTrue(folderCard.isFolderType)
     }
+
+    @Test
+    fun testResizeUnformattedCard() {
+        val rawData = MemcardFormatter.createUnformatted(sizeInMB = 8, useEcc = true)
+        val card = Ps2Memcard.open(rawData)!!
+        assertFalse(card.isFormatted)
+        assertEquals(8.0, card.totalCapacityMb, 0.1)
+
+        val success16 = card.resize(16)
+        assertTrue(success16)
+        assertEquals(16.0, card.totalCapacityMb, 0.1)
+        assertFalse(card.isFormatted)
+        assertEquals(16 * 2048 * 528, card.toByteArray().size)
+
+        val success32 = card.resize(32)
+        assertTrue(success32)
+        assertEquals(32.0, card.totalCapacityMb, 0.1)
+        assertFalse(card.isFormatted)
+        assertEquals(32 * 2048 * 528, card.toByteArray().size)
+    }
+
+    @Test
+    fun testResizeFormattedCardPreservesSavesAndFiles() {
+        val rawData = MemcardFormatter.format(sizeInMB = 8, useEcc = true)
+        val card = Ps2Memcard.open(rawData)!!
+        assertTrue(card.isFormatted)
+        assertEquals(8.0, card.totalCapacityMb, 0.1)
+
+        val saveName = "BASLUS-21445"
+        val testPayload = "Kingdom Hearts II Final Save".toByteArray(Charsets.UTF_8)
+        val dirCluster = card.makeDir(saveName)
+        assertTrue(dirCluster != 0xFFFFFFFFL)
+
+        val writeOk = card.writeFile(dirCluster, "kh2.sav", testPayload)
+        assertTrue(writeOk)
+
+        val initialSaves = card.listSaves()
+        assertEquals(1, initialSaves.size)
+        assertEquals(saveName, initialSaves[0].directoryName)
+
+        val successResize = card.resize(16)
+        assertTrue(successResize)
+        assertEquals(16.0, card.totalCapacityMb, 0.1)
+        assertTrue(card.isFormatted)
+
+        val resizedSaves = card.listSaves()
+        assertEquals(1, resizedSaves.size)
+        assertEquals(saveName, resizedSaves[0].directoryName)
+
+        val fileBytes = card.getSaveFileBytes(saveName, "kh2.sav")
+        assertNotNull(fileBytes)
+        assertArrayEquals(testPayload, fileBytes)
+
+        val stats = card.getStats()
+        assertTrue(stats.totalSpaceKb >= 16 * 1024)
+        assertTrue(stats.freeSpaceBytes > 0)
+    }
+
+    @Test
+    fun testResizeRejectsSmallerOrInvalidSizes() {
+        val rawData = MemcardFormatter.format(sizeInMB = 16, useEcc = true)
+        val card = Ps2Memcard.open(rawData)!!
+        assertEquals(16.0, card.totalCapacityMb, 0.1)
+
+        // Cannot downsize or resize to same size
+        assertFalse(card.resize(8))
+        assertFalse(card.resize(16))
+        // Cannot resize to unsupported capacity
+        assertFalse(card.resize(25))
+    }
 }
 
 

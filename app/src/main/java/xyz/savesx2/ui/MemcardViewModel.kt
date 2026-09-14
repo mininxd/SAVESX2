@@ -8,6 +8,8 @@ import xyz.savesx2.core.CardStats
 import xyz.savesx2.core.ExportFilenameFormat
 import xyz.savesx2.core.MemcardFormatter
 import xyz.savesx2.core.Ps2DirectoryEntry
+import xyz.savesx2.core.Ps2Icon3dSession
+import xyz.savesx2.core.Ps2IconDecoder
 import xyz.savesx2.core.Ps2Memcard
 import xyz.savesx2.core.Ps2Save
 import xyz.savesx2.core.Ps2Timestamp
@@ -170,6 +172,12 @@ class MemcardViewModel : ViewModel() {
 
     private val _showStatsDialog = MutableStateFlow(false)
     val showStatsDialog: StateFlow<Boolean> = _showStatsDialog.asStateFlow()
+
+    private val _showResizeDialog = MutableStateFlow(false)
+    val showResizeDialog: StateFlow<Boolean> = _showResizeDialog.asStateFlow()
+
+    private val _icon3dSession = MutableStateFlow<Ps2Icon3dSession?>(null)
+    val icon3dSession: StateFlow<Ps2Icon3dSession?> = _icon3dSession.asStateFlow()
 
     private val _hexEditorSession = MutableStateFlow<HexEditorSession?>(null)
     val hexEditorSession: StateFlow<HexEditorSession?> = _hexEditorSession.asStateFlow()
@@ -529,6 +537,41 @@ class MemcardViewModel : ViewModel() {
 
     fun setShowStatsDialog(show: Boolean) {
         _showStatsDialog.value = show
+    }
+
+    fun setShowResizeDialog(show: Boolean) {
+        _showResizeDialog.value = show
+    }
+
+    fun open3dIconViewer(save: Ps2Save) {
+        viewModelScope.launch {
+            val loaded = (uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@launch
+            val iconFileName = save.iconSys?.iconFile?.trim()?.ifBlank { null }
+                ?: save.files.firstOrNull { it.name.endsWith(".icn", ignoreCase = true) || it.name.endsWith(".ico", ignoreCase = true) }?.name
+                ?: return@launch
+
+            val iconBytes = withContext(Dispatchers.Default) {
+                loaded.memcard.getSaveFileBytes(save.directoryName, iconFileName)
+            } ?: return@launch
+
+            val mesh = withContext(Dispatchers.Default) {
+                Ps2IconDecoder.parseIconMesh(iconBytes)
+            } ?: run {
+                _snackbarMessage.value = "Failed to parse 3D icon mesh."
+                return@launch
+            }
+
+            _icon3dSession.value = Ps2Icon3dSession(
+                title = save.displayTitle,
+                subtitle = save.displaySubtitle,
+                mesh = mesh,
+                iconSys = save.iconSys
+            )
+        }
+    }
+
+    fun close3dIconViewer() {
+        _icon3dSession.value = null
     }
 
     fun openHexEditor(
@@ -966,6 +1009,54 @@ class MemcardViewModel : ViewModel() {
                         }
                     } catch (t: Throwable) {
                         _uiState.value = CardUiState.Error("Format error: ${t.message ?: "Out of memory"}")
+                    }
+                }
+            }
+        }
+    }
+
+    fun resizeCurrentCard(newSizeMb: Int) {
+        viewModelScope.launch {
+            historyMutex.withLock {
+                val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
+                val currentMb = (current.memcard.totalCapacityMb + 0.5).toInt()
+                if (newSizeMb <= currentMb) {
+                    _snackbarMessage.value = "Target size (${newSizeMb}MB) must be greater than current size (${currentMb}MB)."
+                    return@withLock
+                }
+
+                _uiState.value = CardUiState.Loading("Resizing memory card to ${newSizeMb}MB...")
+                withContext(Dispatchers.Default) {
+                    try {
+                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
+                        val success = current.memcard.resize(newSizeMb)
+                        if (success) {
+                            pushUndoSnapshot(snapshotBefore, "Resize card to ${newSizeMb}MB")
+                            _hasUnsavedChanges.value = true
+                            val saves = current.memcard.listSaves(forceRefresh = true)
+                            val stats = current.memcard.getStats()
+                            val loaded = CardUiState.Loaded(
+                                cardName = current.cardName,
+                                cardUri = current.cardUri,
+                                memcard = current.memcard,
+                                saves = saves,
+                                stats = stats
+                            )
+                            setLoadedState(loaded)
+                            _snackbarMessage.value = "Memory card expanded to ${newSizeMb}MB successfully."
+                        } else {
+                            val reloaded = CardUiState.Loaded(
+                                cardName = current.cardName,
+                                cardUri = current.cardUri,
+                                memcard = current.memcard,
+                                saves = current.memcard.listSaves(),
+                                stats = current.memcard.getStats()
+                            )
+                            setLoadedState(reloaded)
+                            _snackbarMessage.value = "Failed to resize memory card."
+                        }
+                    } catch (t: Throwable) {
+                        _uiState.value = CardUiState.Error("Resize error: ${t.message ?: "Failed"}")
                     }
                 }
             }

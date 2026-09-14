@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -73,9 +74,11 @@ fun SaveDetailModal(
     onDelete: () -> Unit,
     onToggleProtection: (Boolean) -> Unit = {},
     onEditTimestamps: () -> Unit = {},
-    onInspectFileHex: (Ps2SaveFile) -> Unit
+    onInspectFileHex: (Ps2SaveFile) -> Unit,
+    onView3dIcon: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val has3dIcon = save.files.any { it.name.endsWith(".icn", ignoreCase = true) || it.name.endsWith(".ico", ignoreCase = true) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -99,7 +102,12 @@ fun SaveDetailModal(
                         modifier = Modifier
                             .size(46.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                            .then(
+                                if (has3dIcon && onView3dIcon != null) {
+                                    Modifier.clickable { onView3dIcon() }
+                                } else Modifier
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
@@ -146,6 +154,7 @@ fun SaveDetailModal(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -157,6 +166,32 @@ fun SaveDetailModal(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        if (has3dIcon && onView3dIcon != null) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                                modifier = Modifier.clickable { onView3dIcon() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ViewInAr,
+                                        contentDescription = "3D View",
+                                        modifier = Modifier.size(11.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "3D View",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FileOpen
@@ -57,6 +58,7 @@ fun AppHeader(
     onShowStats: () -> Unit,
     onOpenRawHex: (() -> Unit)? = null,
     onCancelEdit: (() -> Unit)? = null,
+    onResizeCard: (() -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -222,6 +224,16 @@ fun AppHeader(
                             onClick = {
                                 menuExpanded = false
                                 onOpenRawHex()
+                            }
+                        )
+                    }
+                    if (cardName != null && onResizeCard != null) {
+                        DropdownMenuItem(
+                            text = { Text("Resize Card") },
+                            leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
+                            onClick = {
+                                menuExpanded = false
+                                onResizeCard()
                             }
                         )
                     }
