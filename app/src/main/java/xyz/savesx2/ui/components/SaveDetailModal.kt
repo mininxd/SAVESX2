@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -121,7 +120,12 @@ fun SaveDetailModal(
                         modifier = Modifier
                             .size(46.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .then(
+                                if (has3dIcon && onView3dIcon != null) {
+                                    Modifier.clickable { onView3dIcon() }
+                                } else Modifier
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -154,7 +158,6 @@ fun SaveDetailModal(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -166,32 +169,6 @@ fun SaveDetailModal(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        if (has3dIcon && onView3dIcon != null) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                                modifier = Modifier.clickable { onView3dIcon() }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ViewInAr,
-                                        contentDescription = "3D View",
-                                        modifier = Modifier.size(11.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "3D View",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -318,41 +295,6 @@ fun SaveDetailModal(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Edit", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-
-                    if (save.region != xyz.savesx2.core.Ps2Region.UNKNOWN) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 6.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                        )
-
-                        // Region Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "Region: ",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                    Text(
-                                        text = "${save.region.displayName} (${save.region.code})",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
                         }
                     }
                 }

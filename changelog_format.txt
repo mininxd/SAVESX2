@@ -1,8 +1,0 @@
-Version 1.6.1
-
-Changes:
-- Added automatic PlayStation save regional detection and clean text badges (US, EU, JP, ASIA, KR, CN, SYS) on save cards and detail modal.
-- Added regional codes and display names to search index for instant filtering by region.
-- Redesigned Settings dialog with a compact grouped layout and streamlined Recent Cards actions.
-- Stripped unused non-English language resources to optimize APK size.
-- Bumped version to 1.6.1 (versionCode 16).
