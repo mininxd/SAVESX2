@@ -12,11 +12,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -201,21 +198,22 @@ fun Icon3dViewerDialog(
                     )
 
                     // Reset button overlay - only shown when model is dragged
-                    AnimatedVisibility(
-                        visible = isModelDragged,
-                        enter = fadeIn() + scaleIn(),
-                        exit = fadeOut() + scaleOut(),
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                    ) {
+                    val resetAlpha by animateFloatAsState(
+                        targetValue = if (isModelDragged) 1f else 0f,
+                        label = "reset_alpha"
+                    )
+
+                    if (resetAlpha > 0.01f) {
                         IconButton(
                             onClick = {
                                 glRenderer.resetView()
                                 isModelDragged = false
                             },
                             modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
                                 .size(32.dp)
+                                .graphicsLayer { alpha = resetAlpha }
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)),
                             colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
