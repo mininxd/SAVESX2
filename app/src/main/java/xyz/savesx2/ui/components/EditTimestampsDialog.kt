@@ -45,7 +45,9 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,54 +110,109 @@ fun EditTimestampsDialog(
 
     // Material 3 Date Picker Dialog
     if (showDatePicker) {
-        val initialUtcMillis = remember(activeYear, activeMonth, activeDay) {
-            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                clear()
-                set(Calendar.YEAR, activeYear)
-                set(Calendar.MONTH, activeMonth - 1)
-                set(Calendar.DAY_OF_MONTH, activeDay)
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
+        key(activeYear, activeMonth, activeDay, selectedTab) {
+            val initialUtcMillis = remember(activeYear, activeMonth, activeDay) {
+                val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                    clear()
+                    set(Calendar.YEAR, activeYear)
+                    set(Calendar.MONTH, activeMonth - 1)
+                    set(Calendar.DAY_OF_MONTH, activeDay)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                cal.timeInMillis
             }
-            cal.timeInMillis
-        }
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = initialUtcMillis,
-            yearRange = 1990..2040
-        )
+            val datePickerState = rememberDatePickerState(
+                initialSelectedDateMillis = initialUtcMillis,
+                yearRange = 1990..2040
+            )
 
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val millis = datePickerState.selectedDateMillis ?: initialUtcMillis
-                        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                            timeInMillis = millis
-                        }
-                        val newY = cal.get(Calendar.YEAR)
-                        val newM = cal.get(Calendar.MONTH) + 1
-                        val newD = cal.get(Calendar.DAY_OF_MONTH)
-                        if (selectedTab == 0) {
-                            modYear = newY; modMonth = newM; modDay = newD
-                        } else {
-                            creYear = newY; creMonth = newM; creDay = newD
-                        }
-                        showDatePicker = false
-                    }
-                ) {
-                    Text("OK", fontWeight = FontWeight.Bold)
+            // When user picks a year from the year picker, sync selectedDateMillis to the new year
+            LaunchedEffect(datePickerState.displayedMonthMillis) {
+                val dispCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                    timeInMillis = datePickerState.displayedMonthMillis
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
+                val dispYear = dispCal.get(Calendar.YEAR)
+                val dispMonth = dispCal.get(Calendar.MONTH) + 1
+
+                val currentSelected = datePickerState.selectedDateMillis
+                if (currentSelected != null) {
+                    val selCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                        timeInMillis = currentSelected
+                    }
+                    val selYear = selCal.get(Calendar.YEAR)
+                    val selMonth = selCal.get(Calendar.MONTH) + 1
+                    val selDay = selCal.get(Calendar.DAY_OF_MONTH)
+
+                    if (selYear != dispYear) {
+                        val maxDays = getDaysInMonth(dispYear, selMonth)
+                        val targetDay = minOf(selDay, maxDays)
+                        val updatedCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                            clear()
+                            set(Calendar.YEAR, dispYear)
+                            set(Calendar.MONTH, selMonth - 1)
+                            set(Calendar.DAY_OF_MONTH, targetDay)
+                        }
+                        datePickerState.selectedDateMillis = updatedCal.timeInMillis
+                    }
                 }
             }
-        ) {
-            DatePicker(state = datePickerState)
+
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val dispCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                                timeInMillis = datePickerState.displayedMonthMillis
+                            }
+                            val dispYear = dispCal.get(Calendar.YEAR)
+                            val dispMonth = dispCal.get(Calendar.MONTH) + 1
+
+                            val selectedMillis = datePickerState.selectedDateMillis
+                            val (newY, newM, newD) = if (selectedMillis != null) {
+                                val selCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                                    timeInMillis = selectedMillis
+                                }
+                                val selYear = selCal.get(Calendar.YEAR)
+                                val selMonth = selCal.get(Calendar.MONTH) + 1
+                                val selDay = selCal.get(Calendar.DAY_OF_MONTH)
+
+                                if (selYear != dispYear) {
+                                    val maxDays = getDaysInMonth(dispYear, selMonth)
+                                    Triple(dispYear, selMonth, minOf(selDay, maxDays))
+                                } else if (selMonth != dispMonth) {
+                                    val maxDays = getDaysInMonth(dispYear, dispMonth)
+                                    Triple(dispYear, dispMonth, minOf(selDay, maxDays))
+                                } else {
+                                    Triple(selYear, selMonth, selDay)
+                                }
+                            } else {
+                                val maxDays = getDaysInMonth(dispYear, dispMonth)
+                                Triple(dispYear, dispMonth, minOf(activeDay, maxDays))
+                            }
+
+                            if (selectedTab == 0) {
+                                modYear = newY; modMonth = newM; modDay = newD
+                            } else {
+                                creYear = newY; creMonth = newM; creDay = newD
+                            }
+                            showDatePicker = false
+                        }
+                    ) {
+                        Text("OK", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) {
+                        Text("Cancel")
+                    }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
         }
     }
 
@@ -673,4 +730,14 @@ private fun formatFriendlyDate(year: Int, month: Int, day: Int): String {
 
 private fun formatFriendlyTime(hour: Int, minute: Int, second: Int): String {
     return String.format(Locale.US, "%02d:%02d:%02d", hour, minute, second)
+}
+
+private fun getDaysInMonth(year: Int, month: Int): Int {
+    val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(Calendar.YEAR, year)
+        set(Calendar.MONTH, maxOf(0, month - 1))
+        set(Calendar.DAY_OF_MONTH, 1)
+    }
+    return cal.getActualMaximum(Calendar.DAY_OF_MONTH)
 }
