@@ -459,9 +459,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val appVersion = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.2"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.0"
         } catch (_: Exception) {
-            "1.6.2"
+            "1.7.0"
         }
         viewModel.checkUpdate(appVersion)
 
@@ -671,9 +671,9 @@ class MainActivity : ComponentActivity() {
                                     updateStatus = updateStatus,
                                     onCheckUpdate = {
                                          val version = try {
-                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.2"
+                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.0"
                                          } catch (e: Exception) {
-                                             "1.6.2"
+                                             "1.7.0"
                                          }
                                         viewModel.checkUpdate(version)
                                     }
@@ -927,9 +927,9 @@ class MainActivity : ComponentActivity() {
                         onClearRecentCards = { viewModel.clearRecentCards(this@MainActivity) },
                         onDismiss = { viewModel.setShowSettingsDialog(false) },
                         versionName = try {
-                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.6.2"
+                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.0"
                         } catch (_: Exception) {
-                            "1.6.2"
+                            "1.7.0"
                         }
                     )
                 }
