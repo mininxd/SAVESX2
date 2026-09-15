@@ -211,43 +211,11 @@ fun Icon3dViewerDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Interactive OpenGL Canvas (transparent floating 3D icon with ambient showcase aura)
+                // Interactive OpenGL Canvas (clean transparent floating 3D icon)
                 Box(
                     modifier = Modifier.size(250.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Subtle ambient radial glow behind the floating 3D model
-                    Box(
-                        modifier = Modifier
-                            .size(210.dp)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.03f),
-                                        Color.Transparent
-                                    )
-                                ),
-                                shape = CircleShape
-                            )
-                    )
-
-                    // Ambient oval pedestal shadow under the floating 3D model
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 12.dp)
-                            .size(width = 130.dp, height = 20.dp)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        Color.Black.copy(alpha = 0.20f),
-                                        Color.Transparent
-                                    )
-                                ),
-                                shape = RoundedCornerShape(50)
-                            )
-                    )
 
                     AndroidView(
                         factory = { ctx ->
