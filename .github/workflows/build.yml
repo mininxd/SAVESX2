@@ -19,7 +19,7 @@ on:
 
 jobs:
   build:
-    name: Build APK (Android 11+)
+    name: Build APK (SDK 28+)
     runs-on: ubuntu-latest
 
     steps:

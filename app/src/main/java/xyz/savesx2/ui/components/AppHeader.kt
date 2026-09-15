@@ -59,6 +59,7 @@ fun AppHeader(
     onOpenRawHex: (() -> Unit)? = null,
     onCancelEdit: (() -> Unit)? = null,
     onResizeCard: (() -> Unit)? = null,
+    isFolderCard: Boolean = false,
     onOpenSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -229,11 +230,34 @@ fun AppHeader(
                     }
                     if (cardName != null && onResizeCard != null) {
                         DropdownMenuItem(
-                            text = { Text("Resize Card") },
-                            leadingIcon = { Icon(Icons.Default.AspectRatio, null) },
+                            text = {
+                                Column {
+                                    Text(
+                                        text = "Resize Card",
+                                        color = if (isFolderCard) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (isFolderCard) {
+                                        Text(
+                                            text = "Not supported for folder cards",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.AspectRatio,
+                                    null,
+                                    tint = if (isFolderCard) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            enabled = !isFolderCard,
                             onClick = {
                                 menuExpanded = false
-                                onResizeCard()
+                                if (!isFolderCard) {
+                                    onResizeCard()
+                                }
                             }
                         )
                     }

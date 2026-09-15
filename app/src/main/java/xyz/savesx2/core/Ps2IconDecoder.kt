@@ -298,7 +298,11 @@ object Ps2IconDecoder {
         val centerY: Float,
         val centerZ: Float,
         val scale: Float,
-        val vertexBuffer: java.nio.FloatBuffer? = null
+        val vertexBuffer: java.nio.FloatBuffer? = null,
+        val animShapes: Int = 1,
+        val shapesPositions: List<FloatArray> = emptyList(),
+        val animFrameLength: Int = 0,
+        val animSpeed: Float = 1.0f
     )
 
     fun parseIconMesh(icnData: ByteArray): ParsedIconMesh? {
@@ -320,9 +324,9 @@ object Ps2IconDecoder {
         if (icnData.size < 20 + totalVertexBytes) return null
 
         // 1. Read vertices, normals, UVs, and colors
-        val posX = FloatArray(vertexCount)
-        val posY = FloatArray(vertexCount)
-        val posZ = FloatArray(vertexCount)
+        val shapesPosX = Array(animShapes) { FloatArray(vertexCount) }
+        val shapesPosY = Array(animShapes) { FloatArray(vertexCount) }
+        val shapesPosZ = Array(animShapes) { FloatArray(vertexCount) }
         val normX = FloatArray(vertexCount)
         val normY = FloatArray(vertexCount)
         val normZ = FloatArray(vertexCount)
@@ -335,15 +339,16 @@ object Ps2IconDecoder {
         var anyNonZeroColor = false
 
         for (i in 0 until vertexCount) {
-            // Shape 0 position
-            val x = buf.short.toInt()
-            val y = buf.short.toInt()
-            val z = buf.short.toInt()
-            buf.short // pad
+            // Read positions for each animation shape
+            for (s in 0 until animShapes) {
+                val x = buf.short.toInt()
+                val y = buf.short.toInt()
+                val z = buf.short.toInt()
+                buf.short // pad
 
-            // Skip additional animation shapes for this vertex
-            if (animShapes > 1) {
-                buf.position(buf.position() + (animShapes - 1) * 8)
+                shapesPosX[s][i] = x / 4096.0f
+                shapesPosY[s][i] = -y / 4096.0f
+                shapesPosZ[s][i] = -z / 4096.0f
             }
 
             // Normal
@@ -366,11 +371,6 @@ object Ps2IconDecoder {
                 anyNonZeroColor = true
             }
 
-            // Coordinates matching icon.vert: x, -y, -z divided by 4096.0f
-            posX[i] = x / 4096.0f
-            posY[i] = -y / 4096.0f
-            posZ[i] = -z / 4096.0f
-
             normX[i] = nx / 4096.0f
             normY[i] = -ny / 4096.0f
             normZ[i] = -nz / 4096.0f
@@ -381,6 +381,25 @@ object Ps2IconDecoder {
             colR[i] = (cr / 128.0f).coerceIn(0f, 1f)
             colG[i] = (cg / 128.0f).coerceIn(0f, 1f)
             colB[i] = (cb / 128.0f).coerceIn(0f, 1f)
+        }
+
+        val posX = shapesPosX[0]
+        val posY = shapesPosY[0]
+        val posZ = shapesPosZ[0]
+
+        val shapesPositions = ArrayList<FloatArray>(animShapes)
+        for (s in 0 until animShapes) {
+            val arr = FloatArray(vertexCount * 3)
+            val spX = shapesPosX[s]
+            val spY = shapesPosY[s]
+            val spZ = shapesPosZ[s]
+            for (i in 0 until vertexCount) {
+                val idx = i * 3
+                arr[idx] = spX[i]
+                arr[idx + 1] = spY[i]
+                arr[idx + 2] = spZ[i]
+            }
+            shapesPositions.add(arr)
         }
 
         if (!anyNonZeroColor) {
@@ -397,25 +416,39 @@ object Ps2IconDecoder {
 
         // Calculate texture offset past animation section
         var texOffset = 20 + totalVertexBytes
+        var animFrameLength = 0
+        var animSpeed = 1.0f
+        var animPlayOffset = 0
+        var animFrameCount = 0
+
         if (icnData.size >= texOffset + 20) {
             buf.position(texOffset)
             val animIdTag = buf.int
-            buf.int // frameLength
-            buf.float // animSpeed
-            buf.int // playOffset
+            val frameLength = buf.int
+            val speed = buf.float
+            val playOffset = buf.int
             val frameCount = buf.int
             texOffset += 20
 
             if (animIdTag == 0x01 && frameCount in 1..10000) {
+                animFrameLength = if (frameLength > 0) frameLength else (animShapes * 15)
+                animSpeed = if (speed > 0f && !speed.isNaN()) speed else 1.0f
+                animPlayOffset = playOffset
+                animFrameCount = frameCount
+
                 for (f in 0 until frameCount) {
                     if (texOffset + 8 > icnData.size) break
                     buf.position(texOffset)
-                    buf.int // shapeId
+                    val shapeId = buf.int
                     val rawKeyCount = buf.int
                     val keyCount = if (rawKeyCount > 0) rawKeyCount - 1 else 0
                     texOffset += 16 + keyCount * 8
                 }
             }
+        }
+
+        if (animFrameLength <= 0 && animShapes > 1) {
+            animFrameLength = animShapes * 15
         }
 
         val hasTextureFlag = (texFlags and 0x04) != 0 || texFlags == 0x07 || texFlags == 0x06
@@ -528,7 +561,11 @@ object Ps2IconDecoder {
             centerY = centerY,
             centerZ = centerZ,
             scale = scale,
-            vertexBuffer = vertexBuffer
+            vertexBuffer = vertexBuffer,
+            animShapes = animShapes,
+            shapesPositions = shapesPositions,
+            animFrameLength = animFrameLength,
+            animSpeed = animSpeed
         )
     }
 

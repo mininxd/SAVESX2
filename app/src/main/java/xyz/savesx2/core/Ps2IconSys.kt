@@ -44,6 +44,35 @@ data class Ps2IconSys(
             buf.position(0x0C)
             val transparency = buf.int
 
+            // Read background corner colors at 0x10 and 0x40 (RGBA uint32 arrays)
+            val bgTopLeft = try {
+                buf.position(0x10)
+                val r = buf.int.coerceIn(0, 255)
+                val g = buf.int.coerceIn(0, 255)
+                val b = buf.int.coerceIn(0, 255)
+                if (r > 0 || g > 0 || b > 0) {
+                    (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                } else {
+                    0xFF003882.toInt()
+                }
+            } catch (_: Throwable) {
+                0xFF003882.toInt()
+            }
+
+            val bgBottomRight = try {
+                buf.position(0x40)
+                val r = buf.int.coerceIn(0, 255)
+                val g = buf.int.coerceIn(0, 255)
+                val b = buf.int.coerceIn(0, 255)
+                if (r > 0 || g > 0 || b > 0) {
+                    (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                } else {
+                    0xFF001538.toInt()
+                }
+            } catch (_: Throwable) {
+                0xFF001538.toInt()
+            }
+
             // Read ambient color floats at 0xB0
             buf.position(0xB0)
             val ambR = buf.float
@@ -104,7 +133,9 @@ data class Ps2IconSys(
                 deleteIconFile = deleteIconFile,
                 ambientR = if (ambR in 0f..1f) ambR else 0.5f,
                 ambientG = if (ambG in 0f..1f) ambG else 0.5f,
-                ambientB = if (ambB in 0f..1f) ambB else 0.5f
+                ambientB = if (ambB in 0f..1f) ambB else 0.5f,
+                bgTopLeft = bgTopLeft,
+                bgBottomRight = bgBottomRight
             )
         }
 

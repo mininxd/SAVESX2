@@ -541,6 +541,11 @@ class MemcardViewModel : ViewModel() {
     }
 
     fun setShowResizeDialog(show: Boolean) {
+        val loaded = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard
+        if (show && loaded?.isFolderCard == true) {
+            _snackbarMessage.value = "Folder-based memory cards do not have a fixed capacity and cannot be resized."
+            return
+        }
         _showResizeDialog.value = show
     }
 
@@ -1021,6 +1026,10 @@ class MemcardViewModel : ViewModel() {
         viewModelScope.launch {
             historyMutex.withLock {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
+                if (current.isFolderCard) {
+                    _snackbarMessage.value = "Folder-based memory cards do not have a fixed capacity and cannot be resized."
+                    return@withLock
+                }
                 val currentMb = (current.memcard.totalCapacityMb + 0.5).toInt()
                 if (newSizeMb <= currentMb) {
                     _snackbarMessage.value = "Target size (${newSizeMb}MB) must be greater than current size (${currentMb}MB)."

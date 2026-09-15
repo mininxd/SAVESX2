@@ -617,6 +617,7 @@ class MainActivity : ComponentActivity() {
                             onFormatCard = { viewModel.setShowFormatDialog(true) },
                             onShowStats = { viewModel.setShowStatsDialog(true) },
                             onResizeCard = { viewModel.setShowResizeDialog(true) },
+                            isFolderCard = (uiState as? CardUiState.Loaded)?.isFolderCard ?: false,
                             onOpenRawHex = {
                                 (uiState as? CardUiState.Loaded)?.let { loaded ->
                                     viewModel.openHexEditor(
@@ -858,16 +859,20 @@ class MainActivity : ComponentActivity() {
 
                 if (showResizeDialog) {
                     (uiState as? CardUiState.Loaded)?.let { loaded ->
-                        val currentMb = (loaded.memcard.totalCapacityMb + 0.5).toInt()
-                        ResizeCardDialog(
-                            cardName = loaded.cardName,
-                            currentCapacityMb = currentMb,
-                            onDismiss = { viewModel.setShowResizeDialog(false) },
-                            onConfirmResize = { targetMb ->
-                                viewModel.setShowResizeDialog(false)
-                                viewModel.resizeCurrentCard(targetMb)
-                            }
-                        )
+                        if (!loaded.isFolderCard) {
+                            val currentMb = (loaded.memcard.totalCapacityMb + 0.5).toInt()
+                            ResizeCardDialog(
+                                cardName = loaded.cardName,
+                                currentCapacityMb = currentMb,
+                                onDismiss = { viewModel.setShowResizeDialog(false) },
+                                onConfirmResize = { targetMb ->
+                                    viewModel.setShowResizeDialog(false)
+                                    viewModel.resizeCurrentCard(targetMb)
+                                }
+                            )
+                        } else {
+                            viewModel.setShowResizeDialog(false)
+                        }
                     }
                 }
 

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
@@ -41,6 +42,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -91,9 +93,11 @@ fun Icon3dViewerDialog(
     onDismiss: () -> Unit
 ) {
     var isModelDragged by remember { mutableStateOf(false) }
+    var isAnimated by remember { mutableStateOf(session.mesh.animShapes > 1) }
 
     val glRenderer = remember(session) {
         Ps2IconGlRenderer(session.mesh, session.iconSys).apply {
+            this.isAnimated = isAnimated
             onResetFinished = {
                 isModelDragged = false
             }
@@ -192,6 +196,20 @@ fun Icon3dViewerDialog(
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
+                                if (session.mesh.animShapes > 1) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.75f)
+                                    ) {
+                                        Text(
+                                            text = "${session.mesh.animShapes} Shapes",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -286,7 +304,69 @@ fun Icon3dViewerDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Animated 3D Switch Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Animation,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = if (isAnimated && session.mesh.animShapes > 1) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.outline
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Animated 3D",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = when {
+                                        session.mesh.animShapes <= 1 -> "Static model (1 shape in save)"
+                                        isAnimated -> "${session.mesh.animShapes} poses • Playing at ${session.mesh.animSpeed}x"
+                                        else -> "Paused (static pose)"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = isAnimated && session.mesh.animShapes > 1,
+                            onCheckedChange = { checked ->
+                                isAnimated = checked
+                                glRenderer.isAnimated = checked
+                            },
+                            enabled = session.mesh.animShapes > 1
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Close Button
                 FilledTonalButton(
@@ -376,6 +456,7 @@ class Ps2IconGlRenderer(
     private val iconSys: Ps2IconSys?
 ) : GLSurfaceView.Renderer {
 
+    @Volatile var isAnimated: Boolean = true
     @Volatile var pitchDeg: Float = DEFAULT_PITCH_DEG
     @Volatile var yawDeg: Float = DEFAULT_YAW_DEG
     @Volatile var zoomScale: Float = DEFAULT_ZOOM
@@ -386,6 +467,7 @@ class Ps2IconGlRenderer(
     var onResetFinished: (() -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private var animTimerSec: Float = 0f
     private var lastFrameTimeMs: Long = 0L
     private var program: Int = 0
     private var textureId: Int = 0
@@ -394,8 +476,10 @@ class Ps2IconGlRenderer(
     private var uModelMatrixHandle: Int = -1
     private var uAmbientHandle: Int = -1
     private var uTextureHandle: Int = -1
+    private var uTweenFactorHandle: Int = -1
 
     private var aPositionHandle: Int = -1
+    private var aNextPositionHandle: Int = -1
     private var aNormalHandle: Int = -1
     private var aTexCoordHandle: Int = -1
     private var aColorHandle: Int = -1
@@ -406,7 +490,8 @@ class Ps2IconGlRenderer(
     private val viewProjMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
 
-    private var vertexBuffer: FloatBuffer? = null
+    private var shapeBuffers: List<FloatBuffer> = emptyList()
+    private var attribBuffer: FloatBuffer? = null
 
     fun resetView() {
         isTouching = false
@@ -426,8 +511,10 @@ class Ps2IconGlRenderer(
         uModelMatrixHandle = GLES20.glGetUniformLocation(program, "uModelMatrix")
         uAmbientHandle = GLES20.glGetUniformLocation(program, "uAmbient")
         uTextureHandle = GLES20.glGetUniformLocation(program, "uTexture")
+        uTweenFactorHandle = GLES20.glGetUniformLocation(program, "uTweenFactor")
 
         aPositionHandle = GLES20.glGetAttribLocation(program, "aPosition")
+        aNextPositionHandle = GLES20.glGetAttribLocation(program, "aNextPosition")
         aNormalHandle = GLES20.glGetAttribLocation(program, "aNormal")
         aTexCoordHandle = GLES20.glGetAttribLocation(program, "aTexCoord")
         aColorHandle = GLES20.glGetAttribLocation(program, "aColor")
@@ -447,31 +534,49 @@ class Ps2IconGlRenderer(
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, texBitmap, 0)
         texBitmap.recycle()
 
-        // Vertex buffer
-        vertexBuffer = mesh.vertexBuffer ?: run {
+        // Allocate shape position buffers (one per animation shape)
+        shapeBuffers = if (mesh.shapesPositions.isNotEmpty()) {
+            mesh.shapesPositions.map { posArray ->
+                val buf = ByteBuffer.allocateDirect(posArray.size * 4)
+                    .order(ByteOrder.nativeOrder())
+                    .asFloatBuffer()
+                buf.put(posArray)
+                buf.position(0)
+                buf
+            }
+        } else {
             val count = mesh.vertexCount
-            val buf = ByteBuffer.allocateDirect(count * 11 * 4)
+            val buf = ByteBuffer.allocateDirect(count * 3 * 4)
                 .order(ByteOrder.nativeOrder())
                 .asFloatBuffer()
             for (i in 0 until count) {
                 buf.put(mesh.posX[i])
                 buf.put(mesh.posY[i])
                 buf.put(mesh.posZ[i])
-
-                buf.put(mesh.normX[i])
-                buf.put(mesh.normY[i])
-                buf.put(mesh.normZ[i])
-
-                buf.put(mesh.uvU[i])
-                buf.put(mesh.uvV[i])
-
-                buf.put(mesh.colR[i])
-                buf.put(mesh.colG[i])
-                buf.put(mesh.colB[i])
             }
             buf.position(0)
-            buf
+            listOf(buf)
         }
+
+        // Allocate unified attribute buffer: Normals (3), UVs (2), Colors (3)
+        val count = mesh.vertexCount
+        attribBuffer = ByteBuffer.allocateDirect(count * 8 * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer().apply {
+                for (i in 0 until count) {
+                    put(mesh.normX[i])
+                    put(mesh.normY[i])
+                    put(mesh.normZ[i])
+
+                    put(mesh.uvU[i])
+                    put(mesh.uvV[i])
+
+                    put(mesh.colR[i])
+                    put(mesh.colG[i])
+                    put(mesh.colB[i])
+                }
+                position(0)
+            }
 
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         GLES20.glDepthFunc(GLES20.GL_LEQUAL)
@@ -497,6 +602,10 @@ class Ps2IconGlRenderer(
         val now = SystemClock.uptimeMillis()
         val dt = if (lastFrameTimeMs == 0L) 0.016f else minOf(0.05f, (now - lastFrameTimeMs) / 1000f)
         lastFrameTimeMs = now
+
+        if (isAnimated) {
+            animTimerSec += dt
+        }
 
         // Animation update
         if (isResetting) {
@@ -536,7 +645,7 @@ class Ps2IconGlRenderer(
         GLES20.glClearColor(0f, 0f, 0f, 0f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
 
-        if (program == 0 || vertexBuffer == null) return
+        if (program == 0 || shapeBuffers.isEmpty() || attribBuffer == null) return
 
         GLES20.glUseProgram(program)
 
@@ -567,28 +676,55 @@ class Ps2IconGlRenderer(
         val ambB = iconSys?.ambientB?.coerceIn(0.4f, 0.8f) ?: 0.55f
         GLES20.glUniform3f(uAmbientHandle, ambR, ambG, ambB)
 
-        val vBuf = vertexBuffer!!
-        val stride = 11 * 4
+        // Shape animation interpolation
+        val canAnimate = isAnimated && shapeBuffers.size > 1
+        val (currShape, nextShape, tweenFactor) = if (canAnimate) {
+            val animSpeed = if (mesh.animSpeed > 0f) mesh.animSpeed else 1.0f
+            val cycleFrames = if (mesh.animFrameLength > 0) mesh.animFrameLength.toFloat() else (mesh.animShapes * 15f)
+            val totalFrames = animTimerSec * 60f * animSpeed
+            val currentFrame = (totalFrames % cycleFrames + cycleFrames) % cycleFrames
+            val framesPerShape = cycleFrames / mesh.animShapes.toFloat()
+            val shapeIndexFloat = currentFrame / framesPerShape
+            val curr = (shapeIndexFloat.toInt()) % mesh.animShapes
+            val next = (curr + 1) % mesh.animShapes
+            val factor = (shapeIndexFloat - shapeIndexFloat.toInt().toFloat()).coerceIn(0f, 1f)
+            Triple(curr, next, factor)
+        } else {
+            Triple(0, 0, 0f)
+        }
 
-        vBuf.position(0)
-        GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, stride, vBuf)
+        GLES20.glUniform1f(uTweenFactorHandle, tweenFactor)
+
+        val currBuf = shapeBuffers[currShape]
+        val nextBuf = shapeBuffers[nextShape]
+        val aBuf = attribBuffer!!
+
+        currBuf.position(0)
+        GLES20.glVertexAttribPointer(aPositionHandle, 3, GLES20.GL_FLOAT, false, 0, currBuf)
         GLES20.glEnableVertexAttribArray(aPositionHandle)
 
-        vBuf.position(3)
-        GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, stride, vBuf)
+        nextBuf.position(0)
+        GLES20.glVertexAttribPointer(aNextPositionHandle, 3, GLES20.GL_FLOAT, false, 0, nextBuf)
+        GLES20.glEnableVertexAttribArray(aNextPositionHandle)
+
+        val attribStride = 8 * 4
+
+        aBuf.position(0)
+        GLES20.glVertexAttribPointer(aNormalHandle, 3, GLES20.GL_FLOAT, false, attribStride, aBuf)
         GLES20.glEnableVertexAttribArray(aNormalHandle)
 
-        vBuf.position(6)
-        GLES20.glVertexAttribPointer(aTexCoordHandle, 2, GLES20.GL_FLOAT, false, stride, vBuf)
+        aBuf.position(3)
+        GLES20.glVertexAttribPointer(aTexCoordHandle, 2, GLES20.GL_FLOAT, false, attribStride, aBuf)
         GLES20.glEnableVertexAttribArray(aTexCoordHandle)
 
-        vBuf.position(8)
-        GLES20.glVertexAttribPointer(aColorHandle, 3, GLES20.GL_FLOAT, false, stride, vBuf)
+        aBuf.position(5)
+        GLES20.glVertexAttribPointer(aColorHandle, 3, GLES20.GL_FLOAT, false, attribStride, aBuf)
         GLES20.glEnableVertexAttribArray(aColorHandle)
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, mesh.vertexCount)
 
         GLES20.glDisableVertexAttribArray(aPositionHandle)
+        GLES20.glDisableVertexAttribArray(aNextPositionHandle)
         GLES20.glDisableVertexAttribArray(aNormalHandle)
         GLES20.glDisableVertexAttribArray(aTexCoordHandle)
         GLES20.glDisableVertexAttribArray(aColorHandle)
@@ -645,8 +781,10 @@ class Ps2IconGlRenderer(
             uniform mat4 uMVPMatrix;
             uniform mat4 uModelMatrix;
             uniform vec3 uAmbient;
+            uniform float uTweenFactor;
 
             attribute vec3 aPosition;
+            attribute vec3 aNextPosition;
             attribute vec3 aNormal;
             attribute vec2 aTexCoord;
             attribute vec3 aColor;
@@ -662,7 +800,8 @@ class Ps2IconGlRenderer(
             const vec3 lightCol2 = vec3(0.3, 0.3, 0.3);
 
             void main() {
-                gl_Position = uMVPMatrix * vec4(aPosition, 1.0);
+                vec3 blendedPos = mix(aPosition, aNextPosition, uTweenFactor);
+                gl_Position = uMVPMatrix * vec4(blendedPos, 1.0);
                 vTexCoord = aTexCoord;
 
                 vec3 normal = (uModelMatrix * vec4(aNormal, 0.0)).xyz;
