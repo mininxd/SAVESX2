@@ -1045,17 +1045,41 @@ class Ps2Memcard private constructor(
     }
 
     /**
-     * Imports a save file archive (.psu or .max) onto this memory card.
+     * Imports a save file archive (.psu, .max, .cbs, .xps, or .zip) onto this memory card.
      */
-    fun importSave(saveData: ByteArray): Boolean {
+    fun importSave(saveData: ByteArray, defaultSaveName: String? = null): Boolean {
         if (!isFormatted) return false
-        val unpacked = when {
-            MaxHandler.isMax(saveData) -> MaxHandler.unpackMax(saveData)
-            CbsHandler.isCbs(saveData) -> CbsHandler.unpackCbs(saveData)
-            XpsHandler.isXps(saveData) -> XpsHandler.unpackXps(saveData)
-            else -> PsuHandler.unpackPsu(saveData)
-        } ?: return false
-        return importUnpackedSave(unpacked)
+        val unpackedList: List<PsuHandler.UnpackedPsu> = when {
+            MaxHandler.isMax(saveData) -> MaxHandler.unpackMax(saveData)?.let { listOf(it) } ?: emptyList()
+            CbsHandler.isCbs(saveData) -> CbsHandler.unpackCbs(saveData)?.let { listOf(it) } ?: emptyList()
+            XpsHandler.isXps(saveData) -> XpsHandler.unpackXps(saveData)?.let { listOf(it) } ?: emptyList()
+            ZipSaveHandler.isZipSave(saveData, defaultSaveName) -> ZipSaveHandler.unpackZip(saveData, defaultSaveName)
+            else -> PsuHandler.unpackPsu(saveData)?.let { listOf(it) } ?: emptyList()
+        }
+        if (unpackedList.isEmpty()) return false
+        var anySuccess = false
+        for (unpacked in unpackedList) {
+            if (importUnpackedSave(unpacked)) {
+                anySuccess = true
+            }
+        }
+        return anySuccess
+    }
+
+    /**
+     * Imports a ZIP save archive (.zip) onto this memory card.
+     */
+    fun importZip(zipData: ByteArray, defaultSaveName: String? = null): Boolean {
+        if (!isFormatted) return false
+        val unpackedList = ZipSaveHandler.unpackZip(zipData, defaultSaveName)
+        if (unpackedList.isEmpty()) return false
+        var anySuccess = false
+        for (unpacked in unpackedList) {
+            if (importUnpackedSave(unpacked)) {
+                anySuccess = true
+            }
+        }
+        return anySuccess
     }
 
     /**
@@ -1206,6 +1230,14 @@ class Ps2Memcard private constructor(
             filesMap[f.name] = data
         }
         return XpsHandler.packXps(saveName, save.dirEntry, filesMap)
+    }
+
+    /**
+     * Exports a save folder as a ZIP archive byte array.
+     */
+    fun exportSaveAsZip(saveName: String): ByteArray? {
+        if (!isFormatted) return null
+        return ZipSaveHandler.exportZip(this, saveName)
     }
 
     /**

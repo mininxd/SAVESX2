@@ -22,6 +22,7 @@ import xyz.savesx2.core.RecentCard
 import xyz.savesx2.core.RecentCardsManager
 import xyz.savesx2.core.UpdateChecker
 import xyz.savesx2.core.UpdateStatus
+import xyz.savesx2.core.ZipSaveHandler
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -897,7 +898,8 @@ class MemcardViewModel : ViewModel() {
                         Ps2FileType.SAVEGAME_PSU,
                         Ps2FileType.SAVEGAME_MAX,
                         Ps2FileType.SAVEGAME_CBS,
-                        Ps2FileType.SAVEGAME_XPS -> {
+                        Ps2FileType.SAVEGAME_XPS,
+                        Ps2FileType.SAVEGAME_ZIP -> {
                             _uiState.value = CardUiState.Error("'$fileName' is a savegame file, not a memory card. Please open or create a memory card first, then import this save.")
                         }
                         Ps2FileType.SAVEGAME_FOLDER -> {
@@ -1091,7 +1093,7 @@ class MemcardViewModel : ViewModel() {
         }
     }
 
-    fun importSave(saveBytes: ByteArray) {
+    fun importSave(saveBytes: ByteArray, fileName: String? = null) {
         val currentCheck = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return
         if (!currentCheck.stats.isFormatted) {
             _snackbarMessage.value = "Card must be formatted before importing saves."
@@ -1104,7 +1106,7 @@ class MemcardViewModel : ViewModel() {
                 withContext(Dispatchers.Default) {
                     try {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
-                        val success = current.memcard.importSave(saveBytes)
+                        val success = current.memcard.importSave(saveBytes, fileName)
                         if (success) {
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
@@ -1114,7 +1116,7 @@ class MemcardViewModel : ViewModel() {
                             _hasUnsavedChanges.value = true
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = "Imported save successfully!"
+                            _snackbarMessage.value = if (newSave != null) "Imported save '${newSave.directoryName}' successfully!" else "Imported save successfully!"
                         } else {
                             setLoadedState(current)
                             _snackbarMessage.value = "Failed to import save (insufficient space or invalid format)."
@@ -1138,13 +1140,18 @@ class MemcardViewModel : ViewModel() {
                 _snackbarMessage.value = "'$fileName' is a PS2 memory card image, not a savegame. Use 'Open Card' to open it."
             }
             Ps2FileType.INVALID -> {
-                _snackbarMessage.value = "'$fileName' is not a valid PS2 savegame (.psu, .max, .cbs, .xps)."
+                if (ZipSaveHandler.isZip(bytes) || fileName.endsWith(".zip", ignoreCase = true)) {
+                    _snackbarMessage.value = "ZIP archive '$fileName' does not contain a valid PS2 savegame (missing or invalid icon.sys)."
+                } else {
+                    _snackbarMessage.value = "'$fileName' is not a valid PS2 savegame (.psu, .max, .cbs, .xps, .zip)."
+                }
             }
             Ps2FileType.SAVEGAME_PSU,
             Ps2FileType.SAVEGAME_MAX,
             Ps2FileType.SAVEGAME_CBS,
-            Ps2FileType.SAVEGAME_XPS -> {
-                importSave(bytes)
+            Ps2FileType.SAVEGAME_XPS,
+            Ps2FileType.SAVEGAME_ZIP -> {
+                importSave(bytes, fileName)
             }
             Ps2FileType.SAVEGAME_FOLDER -> {
                 _snackbarMessage.value = "Use folder import to import savegame directories."
@@ -1156,6 +1163,10 @@ class MemcardViewModel : ViewModel() {
         val currentCheck = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return
         if (!currentCheck.stats.isFormatted) {
             _snackbarMessage.value = "Card must be formatted before importing saves."
+            return
+        }
+        if (!FolderMemcardHandler.isValidSaveFolder(saveDir)) {
+            _snackbarMessage.value = "Folder '${saveDir.name}' is not a valid PS2 savegame folder (missing or invalid icon.sys)."
             return
         }
         viewModelScope.launch {
@@ -1190,6 +1201,8 @@ class MemcardViewModel : ViewModel() {
 
     fun importPsu(psuBytes: ByteArray) = importSave(psuBytes)
 
+    fun importZip(zipBytes: ByteArray, fileName: String? = null) = importSave(zipBytes, fileName)
+
     fun exportPsu(saveName: String): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
         return current.memcard.exportSaveAsPsu(saveName)
@@ -1212,20 +1225,7 @@ class MemcardViewModel : ViewModel() {
 
     fun exportZip(saveName: String): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
-        val save = current.saves.firstOrNull { it.directoryName == saveName } ?: return null
-
-        val bos = ByteArrayOutputStream()
-        val zos = ZipOutputStream(bos)
-
-        for (f in save.files) {
-            val data = f.data ?: current.memcard.getSaveFileBytes(saveName, f.name) ?: continue
-            val entry = ZipEntry("${save.directoryName}/${f.name}")
-            zos.putNextEntry(entry)
-            zos.write(data)
-            zos.closeEntry()
-        }
-        zos.close()
-        return bos.toByteArray()
+        return current.memcard.exportSaveAsZip(saveName)
     }
 
 

@@ -149,29 +149,126 @@ object FolderMemcardHandler {
     }
 
     /**
+     * Validates whether a directory is a valid PS2 savegame folder.
+     * Checks inside the folder for a valid icon.sys starting with PS2D magic,
+     * or a valid _pcsx2_index, or a valid standalone save archive (.psu, .max, .cbs, .xps).
+     */
+    fun isValidSaveFolder(saveDir: File): Boolean {
+        if (!saveDir.exists() || !saveDir.isDirectory) return false
+        if (checkFolderForSave(saveDir)) return true
+
+        val subDirs = saveDir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: emptyArray()
+        if (subDirs.size == 1 && checkFolderForSave(subDirs[0])) {
+            return true
+        }
+
+        return false
+    }
+
+    fun checkFolderForSave(dir: File): Boolean {
+        // 1. Check for icon.sys with PS2D magic
+        val iconSys = dir.listFiles { f -> f.isFile && f.name.equals("icon.sys", ignoreCase = true) }?.firstOrNull()
+        if (iconSys != null && iconSys.length() >= 4) {
+            val header = ByteArray(4)
+            val read = try {
+                iconSys.inputStream().use { it.read(header) }
+            } catch (_: Throwable) { 0 }
+            if (read == 4 && ZipSaveHandler.isPs2dHeader(header)) {
+                val files = dir.listFiles { f -> f.isFile && !f.name.startsWith(".") } ?: emptyArray()
+                if (files.isNotEmpty()) return true
+            }
+        }
+
+        // 2. Check for _pcsx2_index
+        val indexFile = File(dir, INDEX_FILENAME)
+        if (indexFile.exists() && indexFile.isFile) {
+            val parsed = parseIndexFile(indexFile)
+            if (parsed != null && (parsed.fileCreated.isNotEmpty() || parsed.fileOrder.isNotEmpty())) {
+                val files = dir.listFiles { f -> f.isFile && f.name != INDEX_FILENAME && !f.name.startsWith(".") } ?: emptyArray()
+                if (files.isNotEmpty()) return true
+            }
+        }
+
+        // 3. Check for standalone save archives (.psu, .max, .cbs, .xps)
+        val files = dir.listFiles { f -> f.isFile } ?: emptyArray()
+        for (f in files) {
+            val lower = f.name.lowercase()
+            if (lower.endsWith(".psu") || lower.endsWith(".max") || lower.endsWith(".cbs") || lower.endsWith(".xps")) {
+                val data = try { f.readBytes() } catch (_: Throwable) { null } ?: continue
+                if (PsuHandler.unpackPsu(data) != null ||
+                    MaxHandler.isMax(data) ||
+                    CbsHandler.isCbs(data) ||
+                    XpsHandler.isXps(data)
+                ) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    /**
      * Imports a single save directory (e.g. BASLUS-21447) onto a memory card.
      */
     fun importSaveFolder(memcard: Ps2Memcard, saveDir: File): Boolean {
         if (!saveDir.exists() || !saveDir.isDirectory) return false
-        val saveName = saveDir.name
-        val saveFiles = saveDir.listFiles { f ->
-            f.isFile && f.name != INDEX_FILENAME && !f.name.startsWith("_pcsx2_deleted_")
-        } ?: return false
 
-        val indexFile = File(saveDir, INDEX_FILENAME)
+        // Resolve actual save directory (either saveDir itself or single child directory)
+        val actualDir = if (checkFolderForSave(saveDir)) {
+            saveDir
+        } else {
+            val subDirs = saveDir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: emptyArray()
+            if (subDirs.size == 1 && checkFolderForSave(subDirs[0])) {
+                subDirs[0]
+            } else {
+                return false
+            }
+        }
+
+        // Check if the folder contains a standalone archive file (.psu, .max, .cbs, .xps)
+        val archiveFile = actualDir.listFiles { f ->
+            f.isFile && (f.name.endsWith(".psu", ignoreCase = true) ||
+                         f.name.endsWith(".max", ignoreCase = true) ||
+                         f.name.endsWith(".cbs", ignoreCase = true) ||
+                         f.name.endsWith(".xps", ignoreCase = true))
+        }?.firstOrNull()
+
+        if (archiveFile != null && actualDir.listFiles { f -> f.name.equals("icon.sys", ignoreCase = true) }.isNullOrEmpty()) {
+            val data = try { archiveFile.readBytes() } catch (_: Throwable) { null }
+            if (data != null) {
+                return memcard.importSave(data, archiveFile.name)
+            }
+        }
+
+        val saveName = ZipSaveHandler.extractPs2SaveName(actualDir.name)
+            ?: ZipSaveHandler.sanitizeSaveName(actualDir.name)
+
+        val saveFiles = actualDir.listFiles { f ->
+            f.isFile && f.name != INDEX_FILENAME && !f.name.startsWith("_pcsx2_deleted_") && !f.name.startsWith(".")
+        } ?: return false
+        if (saveFiles.isEmpty()) return false
+
+        val indexFile = File(actualDir, INDEX_FILENAME)
         val indexData = if (indexFile.exists()) parseIndexFile(indexFile) else null
 
         val rootCreated = indexData?.rootCreated
-            ?: Ps2Timestamp.fromEpochSeconds(saveDir.lastModified() / 1000L)
+            ?: Ps2Timestamp.fromEpochSeconds(actualDir.lastModified() / 1000L)
         val rootModified = indexData?.rootModified
-            ?: Ps2Timestamp.fromEpochSeconds(saveDir.lastModified() / 1000L)
+            ?: Ps2Timestamp.fromEpochSeconds(actualDir.lastModified() / 1000L)
 
         val entries = mutableListOf<PsuHandler.PsuEntry>()
 
         val sortedFiles = saveFiles.sortedWith { f1, f2 ->
             val o1 = indexData?.fileOrder?.get(f1.name) ?: Int.MAX_VALUE
             val o2 = indexData?.fileOrder?.get(f2.name) ?: Int.MAX_VALUE
-            if (o1 != o2) o1.compareTo(o2) else f1.name.compareTo(f2.name)
+            if (o1 != o2) o1.compareTo(o2) else {
+                when {
+                    f1.name.equals("icon.sys", ignoreCase = true) -> -1
+                    f2.name.equals("icon.sys", ignoreCase = true) -> 1
+                    else -> f1.name.compareTo(f2.name)
+                }
+            }
         }
 
         for (f in sortedFiles) {
@@ -196,12 +293,14 @@ object FolderMemcardHandler {
                         dirEntry = 0,
                         modified = fModified,
                         attr = 0,
-                        name = f.name
+                        name = f.name.take(31)
                     ),
                     data = fileData
                 )
             )
         }
+
+        if (entries.isEmpty()) return false
 
         val unpacked = PsuHandler.UnpackedPsu(
             dirEntry = Ps2DirectoryEntry(

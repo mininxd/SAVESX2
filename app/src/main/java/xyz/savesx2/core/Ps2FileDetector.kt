@@ -16,6 +16,7 @@ enum class Ps2FileType {
     SAVEGAME_CBS,            // Pelican CodeBreaker (.cbs)
     SAVEGAME_XPS,            // Datel SharkPort / X-Port (.xps)
     SAVEGAME_FOLDER,         // A save directory containing save files (e.g. icon.sys)
+    SAVEGAME_ZIP,            // PS2 savegame in a ZIP archive (.zip)
     INVALID                  // Not a recognized PS2 file or savegame
 }
 
@@ -37,7 +38,8 @@ data class DetectionResult(
                 fileType == Ps2FileType.SAVEGAME_MAX ||
                 fileType == Ps2FileType.SAVEGAME_CBS ||
                 fileType == Ps2FileType.SAVEGAME_XPS ||
-                fileType == Ps2FileType.SAVEGAME_FOLDER
+                fileType == Ps2FileType.SAVEGAME_FOLDER ||
+                fileType == Ps2FileType.SAVEGAME_ZIP
 }
 
 /**
@@ -74,6 +76,9 @@ object Ps2FileDetector {
         if (isPsuData(data)) {
             return Ps2FileType.SAVEGAME_PSU
         }
+        if (ZipSaveHandler.isZipSave(data, fileName)) {
+            return Ps2FileType.SAVEGAME_ZIP
+        }
 
         return Ps2FileType.INVALID
     }
@@ -101,13 +106,20 @@ object Ps2FileDetector {
                 }
             }
 
-            // Check if it's a save directory (contains icon.sys or save files)
-            if (File(file, "icon.sys").exists()) {
+            // Check if it's a valid save directory (contains valid icon.sys or save files)
+            if (FolderMemcardHandler.isValidSaveFolder(file)) {
+                val targetDir = if (FolderMemcardHandler.checkFolderForSave(file)) {
+                    file
+                } else {
+                    file.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }?.firstOrNull {
+                        FolderMemcardHandler.checkFolderForSave(it)
+                    } ?: file
+                }
                 return DetectionResult(
                     fileType = Ps2FileType.SAVEGAME_FOLDER,
-                    resolvedFile = file,
-                    folderDir = file,
-                    description = "PS2 Savegame Folder (${file.name})"
+                    resolvedFile = targetDir,
+                    folderDir = targetDir,
+                    description = "PS2 Savegame Folder (${targetDir.name})"
                 )
             }
 
@@ -146,6 +158,7 @@ object Ps2FileDetector {
             Ps2FileType.SAVEGAME_CBS -> "CodeBreaker Savegame (${file.name})"
             Ps2FileType.SAVEGAME_XPS -> "SharkPort / X-Port Savegame (${file.name})"
             Ps2FileType.SAVEGAME_FOLDER -> "PS2 Savegame Folder (${file.name})"
+            Ps2FileType.SAVEGAME_ZIP -> "PS2 ZIP Savegame Archive (${file.name})"
             Ps2FileType.INVALID -> "Not a valid PS2 memory card or savegame file"
         }
 
@@ -196,6 +209,7 @@ object Ps2FileDetector {
             Ps2FileType.SAVEGAME_CBS -> "CodeBreaker Savegame ($effectiveName)"
             Ps2FileType.SAVEGAME_XPS -> "SharkPort / X-Port Savegame ($effectiveName)"
             Ps2FileType.SAVEGAME_FOLDER -> "PS2 Savegame Folder ($effectiveName)"
+            Ps2FileType.SAVEGAME_ZIP -> "PS2 ZIP Savegame Archive ($effectiveName)"
             Ps2FileType.INVALID -> "Not a valid PS2 memory card or savegame file"
         }
 
