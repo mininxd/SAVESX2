@@ -49,14 +49,18 @@ themeToggle.addEventListener('click', () => {
 /* ---------- Mobile drawer ---------- */
 const drawer = document.getElementById('drawer');
 const scrim = document.getElementById('scrim');
+const menuOpenBtn = document.getElementById('menu-open');
 
 function setDrawer(open) {
   drawer.classList.toggle('open', open);
   scrim.classList.toggle('open', open);
+  drawer.inert = !open;
+  menuOpenBtn.setAttribute('aria-expanded', String(open));
   document.body.style.overflow = open ? 'hidden' : '';
+  if (open) document.getElementById('menu-close').focus();
 }
 
-document.getElementById('menu-open').addEventListener('click', () => setDrawer(true));
+menuOpenBtn.addEventListener('click', () => setDrawer(true));
 document.getElementById('menu-close').addEventListener('click', () => setDrawer(false));
 scrim.addEventListener('click', () => setDrawer(false));
 drawer.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => setDrawer(false)));
@@ -148,9 +152,6 @@ const heroVersion = document.getElementById('hero-version');
 const dlVersion = document.getElementById('dl-version');
 const dlDate = document.getElementById('dl-date');
 const dlButton = document.getElementById('dl-button');
-const stickyBar = document.getElementById('dl-sticky');
-const stickyVersion = document.getElementById('dl-sticky-version');
-const stickyButton = document.getElementById('dl-sticky-button');
 
 async function refreshRelease() {
   try {
@@ -170,46 +171,38 @@ async function refreshRelease() {
         })}`;
       }
     }
-    if (typeof data.html_url === 'string' && data.html_url) {
-      dlButton.href = data.html_url;
-      stickyButton.href = data.html_url;
-    }
-    stickyVersion.textContent = `${tag} • Android 8.0+`;
+    if (typeof data.html_url === 'string' && data.html_url) dlButton.href = data.html_url;
   } catch {
     heroVersion.textContent = FALLBACK_VERSION;
     dlVersion.textContent = `SAVESX2 ${FALLBACK_TAG}`;
     dlButton.href = RELEASES_URL;
-    stickyButton.href = RELEASES_URL;
-    stickyVersion.textContent = `${FALLBACK_VERSION} • Android 8.0+`;
   }
 }
 
 refreshRelease();
 
-/* ---------- Sticky mobile download bar ----------
-   Slides in once the hero CTAs scroll out of view, hides again at
-   the download section. Dismissible for the rest of the session. */
-let stickyDismissed = false;
-document.getElementById('dl-sticky-close').addEventListener('click', () => {
-  stickyDismissed = true;
-  stickyBar.classList.remove('show');
-});
+/* ---------- Scroll progress bar (rAF-throttled) ---------- */
+const progressBar = document.getElementById('scroll-progress');
+let progressQueued = false;
 
-if ('IntersectionObserver' in window) {
-  let heroVisible = true;
-  let downloadVisible = false;
-  const updateSticky = () => {
-    stickyBar.classList.toggle('show', !stickyDismissed && !heroVisible && !downloadVisible);
-  };
-  new IntersectionObserver(([entry]) => {
-    heroVisible = entry.isIntersecting;
-    updateSticky();
-  }).observe(document.getElementById('top'));
-  new IntersectionObserver(([entry]) => {
-    downloadVisible = entry.isIntersecting;
-    updateSticky();
-  }).observe(document.getElementById('download'));
+function updateProgress() {
+  progressQueued = false;
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  const ratio = max > 0 ? Math.min(window.scrollY / max, 1) : 0;
+  progressBar.style.transform = `scaleX(${ratio})`;
 }
+
+window.addEventListener(
+  'scroll',
+  () => {
+    if (!progressQueued) {
+      progressQueued = true;
+      requestAnimationFrame(updateProgress);
+    }
+  },
+  { passive: true },
+);
+updateProgress();
 
 /* ---------- Footer year ---------- */
 document.getElementById('year').textContent = String(new Date().getFullYear());
