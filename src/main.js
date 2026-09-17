@@ -21,6 +21,8 @@ function applyTheme(theme) {
     'aria-label',
     isDark ? 'Switch to light theme' : 'Switch to dark theme',
   );
+  const themeLabel = document.getElementById('theme-label');
+  if (themeLabel) themeLabel.textContent = isDark ? 'Dark' : 'Light';
   if (metaTheme) metaTheme.setAttribute('content', isDark ? '#0f141c' : '#f9f9fe');
   try {
     localStorage.setItem('savesx2-theme', theme);
@@ -146,6 +148,9 @@ const heroVersion = document.getElementById('hero-version');
 const dlVersion = document.getElementById('dl-version');
 const dlDate = document.getElementById('dl-date');
 const dlButton = document.getElementById('dl-button');
+const stickyBar = document.getElementById('dl-sticky');
+const stickyVersion = document.getElementById('dl-sticky-version');
+const stickyButton = document.getElementById('dl-sticky-button');
 
 async function refreshRelease() {
   try {
@@ -165,15 +170,46 @@ async function refreshRelease() {
         })}`;
       }
     }
-    if (typeof data.html_url === 'string' && data.html_url) dlButton.href = data.html_url;
+    if (typeof data.html_url === 'string' && data.html_url) {
+      dlButton.href = data.html_url;
+      stickyButton.href = data.html_url;
+    }
+    stickyVersion.textContent = `${tag} • Android 8.0+`;
   } catch {
     heroVersion.textContent = FALLBACK_VERSION;
     dlVersion.textContent = `SAVESX2 ${FALLBACK_TAG}`;
     dlButton.href = RELEASES_URL;
+    stickyButton.href = RELEASES_URL;
+    stickyVersion.textContent = `${FALLBACK_VERSION} • Android 8.0+`;
   }
 }
 
 refreshRelease();
+
+/* ---------- Sticky mobile download bar ----------
+   Slides in once the hero CTAs scroll out of view, hides again at
+   the download section. Dismissible for the rest of the session. */
+let stickyDismissed = false;
+document.getElementById('dl-sticky-close').addEventListener('click', () => {
+  stickyDismissed = true;
+  stickyBar.classList.remove('show');
+});
+
+if ('IntersectionObserver' in window) {
+  let heroVisible = true;
+  let downloadVisible = false;
+  const updateSticky = () => {
+    stickyBar.classList.toggle('show', !stickyDismissed && !heroVisible && !downloadVisible);
+  };
+  new IntersectionObserver(([entry]) => {
+    heroVisible = entry.isIntersecting;
+    updateSticky();
+  }).observe(document.getElementById('top'));
+  new IntersectionObserver(([entry]) => {
+    downloadVisible = entry.isIntersecting;
+    updateSticky();
+  }).observe(document.getElementById('download'));
+}
 
 /* ---------- Footer year ---------- */
 document.getElementById('year').textContent = String(new Date().getFullYear());
