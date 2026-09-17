@@ -1899,6 +1899,20 @@ footer {
 }
 
 @media (max-width: 640px) {
+  /* Guaranteed safe area on phones: body-level gutters (16px) plus
+     container gutters (8px) = 24px total on each side. The body rule
+     is the backstop — content can never touch the viewport edges
+     even if a container rule fails. */
+  body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .wrap {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
   .section {
     padding: 52px 0;
   }
