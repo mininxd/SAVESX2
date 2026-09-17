@@ -1,0 +1,15 @@
+{
+  "name": "savesx2-website",
+  "private": true,
+  "version": "1.7.0",
+  "type": "module",
+  "description": "SAVESX2 website — PS2 Memory Card Reader & Editor for Android. Retro gamer UI on Material 3, flat colors only.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^7.1.7"
+  }
+}
