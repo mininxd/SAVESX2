@@ -505,16 +505,25 @@ class MemcardViewModel : ViewModel() {
                         val card = Ps2Memcard.open(restoredData) ?: return@withContext
                         val saves = card.listSaves()
                         val stats = card.getStats()
+                        val iconMap = current.saves.mapNotNull { s ->
+                            s.iconBitmap?.let { bmp -> s.directoryName to bmp }
+                        }.toMap()
+                        val savesWithIcons = if (iconMap.isNotEmpty()) {
+                            saves.map { s ->
+                                val bmp = iconMap[s.directoryName]
+                                if (bmp != null) s.copy(iconBitmap = bmp, iconImageBitmap = bmp.asImageBitmap()) else s
+                            }
+                        } else saves
                         val isAtSavedBaseline = savedCardCrc != null && calculateCrc(restoredData) == savedCardCrc
                         _hasUnsavedChanges.value = if (current.cardUri == null) true else !isAtSavedBaseline
                         val updated = current.copy(
                             memcard = card,
-                            saves = saves,
+                            saves = savesWithIcons,
                             stats = stats
                         )
                         setLoadedState(updated)
                         val selName = _selectedSave.value?.directoryName
-                        _selectedSave.value = if (selName != null) saves.firstOrNull { it.directoryName == selName } else null
+                        _selectedSave.value = if (selName != null) savesWithIcons.firstOrNull { it.directoryName == selName } else null
                         _snackbarMessage.value = "Undo: ${snapshotToRestore.actionDescription}"
                     } catch (t: Throwable) {
                         _snackbarMessage.value = "Undo error: ${t.message ?: "Failed to restore state"}"
@@ -552,16 +561,25 @@ class MemcardViewModel : ViewModel() {
                         val card = Ps2Memcard.open(restoredData) ?: return@withContext
                         val saves = card.listSaves()
                         val stats = card.getStats()
+                        val iconMap = current.saves.mapNotNull { s ->
+                            s.iconBitmap?.let { bmp -> s.directoryName to bmp }
+                        }.toMap()
+                        val savesWithIcons = if (iconMap.isNotEmpty()) {
+                            saves.map { s ->
+                                val bmp = iconMap[s.directoryName]
+                                if (bmp != null) s.copy(iconBitmap = bmp, iconImageBitmap = bmp.asImageBitmap()) else s
+                            }
+                        } else saves
                         val isAtSavedBaseline = savedCardCrc != null && calculateCrc(restoredData) == savedCardCrc
                         _hasUnsavedChanges.value = if (current.cardUri == null) true else !isAtSavedBaseline
                         val updated = current.copy(
                             memcard = card,
-                            saves = saves,
+                            saves = savesWithIcons,
                             stats = stats
                         )
                         setLoadedState(updated)
                         val selName = _selectedSave.value?.directoryName
-                        _selectedSave.value = if (selName != null) saves.firstOrNull { it.directoryName == selName } else null
+                        _selectedSave.value = if (selName != null) savesWithIcons.firstOrNull { it.directoryName == selName } else null
                         _snackbarMessage.value = "Redo: ${snapshotToRestore.actionDescription}"
                     } catch (t: Throwable) {
                         _snackbarMessage.value = "Redo error: ${t.message ?: "Failed to restore state"}"

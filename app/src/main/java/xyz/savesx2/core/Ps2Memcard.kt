@@ -1291,6 +1291,56 @@ class Ps2Memcard private constructor(
     /**
      * Sets or removes the copy-protection flag (DF_PROTECTED) for a save folder or PS1 file.
      */
+    /**
+     * Updates a directory slot in place within the directory cluster chain without
+     * clobbering unallocated dirent slots or padding in the cluster.
+     */
+    private fun updateDirentInPlace(
+        dirCluster: Long,
+        matchName: String,
+        updateAction: (clusterData: ByteArray, offset: Int, entry: Ps2DirectoryEntry) -> Ps2DirectoryEntry?
+    ): Ps2DirectoryEntry? {
+        val maxAllocatable = superBlock.allocatableClusters
+        var currentCluster = dirCluster
+        var iteration = 0
+
+        while (currentCluster in 0 until maxAllocatable && iteration < 1000) {
+            iteration++
+            val diskCluster = allocOffset + currentCluster
+            if (diskCluster >= totalClusters) break
+            val clusterData = readCluster(diskCluster)
+            if (clusterData.isEmpty()) break
+
+            val entriesPerCluster = maxOf(1, clusterSize / Ps2DirectoryEntry.ENTRY_SIZE)
+            for (i in 0 until entriesPerCluster) {
+                val offset = i * Ps2DirectoryEntry.ENTRY_SIZE
+                if (offset + Ps2DirectoryEntry.ENTRY_SIZE > clusterData.size) break
+
+                val entry = Ps2DirectoryEntry.parse(clusterData, offset) ?: continue
+                if (!entry.isExists) continue
+
+                val entryName = entry.name.trim().trimEnd('\u0000')
+                if (entryName == matchName) {
+                    val updated = updateAction(clusterData, offset, entry)
+                    if (updated != null) {
+                        writeCluster(diskCluster, clusterData)
+                        return updated
+                    }
+                }
+            }
+
+            val rawNext = getFatEntry(currentCluster)
+            val next = rawNext and 0x7FFFFFFFL
+            if (next == 0x7FFFFFFFL || rawNext == 0xFFFFFFFFL || next >= maxAllocatable) break
+            currentCluster = next
+        }
+        return null
+    }
+
+    /**
+     * Toggles copy-protection (DF_PROTECTED bit) on a save folder or PS1 file.
+     * Updates directory entries in place so other cluster metadata is preserved bit-for-bit.
+     */
     fun setSaveProtection(saveName: String, isProtected: Boolean): Boolean {
         if (!isFormatted) return false
         val rootCluster = if (superBlock.rootdirCluster >= allocOffset) {
@@ -1298,45 +1348,44 @@ class Ps2Memcard private constructor(
         } else {
             superBlock.rootdirCluster
         }
-        val rootEntries = readDirents(rootCluster).toMutableList()
-        val index = rootEntries.indexOfFirst { it.name.trim().trimEnd('\u0000') == saveName }
-        if (index == -1) return false
 
-        val entry = rootEntries[index]
-        val newMode = if (isProtected) {
-            entry.mode or Ps2DirectoryEntry.DF_PROTECTED
-        } else {
-            entry.mode and Ps2DirectoryEntry.DF_PROTECTED.inv()
-        }
-        rootEntries[index] = entry.copy(mode = newMode)
-        val ok = writeDirents(rootCluster, rootEntries)
+        val updatedEntry = updateDirentInPlace(rootCluster, saveName) { clusterData, offset, entry ->
+            val newMode = if (isProtected) {
+                entry.mode or Ps2DirectoryEntry.DF_PROTECTED
+            } else {
+                entry.mode and Ps2DirectoryEntry.DF_PROTECTED.inv()
+            }
+            clusterData[offset] = (newMode and 0xFF).toByte()
+            clusterData[offset + 1] = ((newMode shr 8) and 0xFF).toByte()
+            entry.copy(mode = newMode)
+        } ?: return false
 
-        if (entry.isDirectory && entry.cluster in 0 until superBlock.allocatableClusters) {
-            val subEntries = readDirents(entry.cluster).toMutableList()
-            if (subEntries.isNotEmpty() && subEntries[0].name == ".") {
-                subEntries[0] = subEntries[0].copy(mode = newMode)
-                writeDirents(entry.cluster, subEntries)
+        // Update "." entry in subfolder if it's a directory
+        if (updatedEntry.isDirectory && updatedEntry.cluster in 0 until superBlock.allocatableClusters) {
+            updateDirentInPlace(updatedEntry.cluster, ".") { subClusterData, subOffset, dotEntry ->
+                val newMode = updatedEntry.mode
+                subClusterData[subOffset] = (newMode and 0xFF).toByte()
+                subClusterData[subOffset + 1] = ((newMode shr 8) and 0xFF).toByte()
+                dotEntry.copy(mode = newMode)
             }
         }
 
-        if (ok) {
-            val currentCache = cachedSaves
-            if (currentCache != null) {
-                cachedSaves = currentCache.map { s ->
-                    if (s.directoryName == saveName) {
-                        s.copy(
-                            isProtected = isProtected,
-                            dirEntry = s.dirEntry.copy(mode = newMode)
-                        )
-                    } else s
-                }
+        val currentCache = cachedSaves
+        if (currentCache != null) {
+            cachedSaves = currentCache.map { s ->
+                if (s.directoryName == saveName) {
+                    s.copy(
+                        isProtected = isProtected,
+                        dirEntry = s.dirEntry.copy(mode = updatedEntry.mode)
+                    )
+                } else s
             }
         }
-        return ok
+        return true
     }
 
     /**
-     * Updates the created and modified timestamps for a save folder.
+     * Updates the created and modified timestamps for a save folder in place.
      */
     fun updateSaveTimestamps(saveName: String, created: Ps2Timestamp, modified: Ps2Timestamp): Boolean {
         if (!isFormatted) return false
@@ -1345,37 +1394,38 @@ class Ps2Memcard private constructor(
         } else {
             superBlock.rootdirCluster
         }
-        val rootEntries = readDirents(rootCluster).toMutableList()
-        val index = rootEntries.indexOfFirst { it.name.trim().trimEnd('\u0000') == saveName }
-        if (index == -1) return false
 
-        val entry = rootEntries[index]
-        rootEntries[index] = entry.copy(created = created, modified = modified)
-        val ok = writeDirents(rootCluster, rootEntries)
+        val createdBytes = created.toByteArray()
+        val modifiedBytes = modified.toByteArray()
 
-        if (entry.isDirectory && entry.cluster in 0 until superBlock.allocatableClusters) {
-            val subEntries = readDirents(entry.cluster).toMutableList()
-            if (subEntries.isNotEmpty() && subEntries[0].name == ".") {
-                subEntries[0] = subEntries[0].copy(created = created, modified = modified)
-                writeDirents(entry.cluster, subEntries)
+        val updatedEntry = updateDirentInPlace(rootCluster, saveName) { clusterData, offset, entry ->
+            System.arraycopy(createdBytes, 0, clusterData, offset + 0x08, 8)
+            System.arraycopy(modifiedBytes, 0, clusterData, offset + 0x18, 8)
+            entry.copy(created = created, modified = modified)
+        } ?: return false
+
+        // Update "." entry in subfolder if it's a directory
+        if (updatedEntry.isDirectory && updatedEntry.cluster in 0 until superBlock.allocatableClusters) {
+            updateDirentInPlace(updatedEntry.cluster, ".") { subClusterData, subOffset, dotEntry ->
+                System.arraycopy(createdBytes, 0, subClusterData, subOffset + 0x08, 8)
+                System.arraycopy(modifiedBytes, 0, subClusterData, subOffset + 0x18, 8)
+                dotEntry.copy(created = created, modified = modified)
             }
         }
 
-        if (ok) {
-            val currentCache = cachedSaves
-            if (currentCache != null) {
-                cachedSaves = currentCache.map { s ->
-                    if (s.directoryName == saveName) {
-                        s.copy(
-                            createdDate = created.toFormattedString(),
-                            modifiedDate = modified.toFormattedString(),
-                            dirEntry = s.dirEntry.copy(created = created, modified = modified)
-                        )
-                    } else s
-                }
+        val currentCache = cachedSaves
+        if (currentCache != null) {
+            cachedSaves = currentCache.map { s ->
+                if (s.directoryName == saveName) {
+                    s.copy(
+                        createdDate = created.toFormattedString(),
+                        modifiedDate = modified.toFormattedString(),
+                        dirEntry = s.dirEntry.copy(created = created, modified = modified)
+                    )
+                } else s
             }
         }
-        return ok
+        return true
     }
 
     /**

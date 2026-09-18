@@ -764,6 +764,30 @@ fun HexViewerDialog(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
 
+                        val offsetColor = MaterialTheme.colorScheme.primary
+                        val normalHexColor = MaterialTheme.colorScheme.onSurface
+                        val zeroHexColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        val ffHexColor = MaterialTheme.colorScheme.tertiary
+                        val asciiColor = MaterialTheme.colorScheme.secondary
+                        val dotColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        val selectedBgColor = MaterialTheme.colorScheme.primary
+                        val selectedTextColor = MaterialTheme.colorScheme.onPrimary
+                        val modifiedBgColor = Ps2AccentAmber.copy(alpha = 0.35f)
+                        val searchBgColor = MaterialTheme.colorScheme.tertiaryContainer
+                        val searchTextColor = MaterialTheme.colorScheme.onTertiaryContainer
+
+                        val offsetNormalSpanStyle = remember(offsetColor) { SpanStyle(color = offsetColor, fontWeight = FontWeight.Normal) }
+                        val offsetActiveSpanStyle = remember(offsetColor) { SpanStyle(color = offsetColor, fontWeight = FontWeight.Bold) }
+                        val normalHexSpanStyle = remember(normalHexColor) { SpanStyle(color = normalHexColor, fontWeight = FontWeight.Normal) }
+                        val zeroHexSpanStyle = remember(zeroHexColor) { SpanStyle(color = zeroHexColor, fontWeight = FontWeight.Normal) }
+                        val ffHexSpanStyle = remember(ffHexColor) { SpanStyle(color = ffHexColor, fontWeight = FontWeight.Medium) }
+                        val asciiHexSpanStyle = remember(asciiColor) { SpanStyle(color = asciiColor, fontWeight = FontWeight.Medium) }
+                        val dotAsciiSpanStyle = remember(dotColor) { SpanStyle(color = dotColor, fontWeight = FontWeight.Normal) }
+                        val normalAsciiSpanStyle = remember(normalHexColor) { SpanStyle(color = normalHexColor, fontWeight = FontWeight.Normal) }
+                        val selectedSpanStyle = remember(selectedBgColor, selectedTextColor) { SpanStyle(background = selectedBgColor, color = selectedTextColor, fontWeight = FontWeight.Bold) }
+                        val searchSpanStyle = remember(searchBgColor, searchTextColor) { SpanStyle(background = searchBgColor, color = searchTextColor, fontWeight = FontWeight.Bold) }
+                        val modifiedSpanStyle = remember(modifiedBgColor, normalHexColor) { SpanStyle(background = modifiedBgColor, color = normalHexColor, fontWeight = FontWeight.Bold) }
+
                         // Hex Data Rows
                         LazyColumn(
                             state = listState,
@@ -778,26 +802,13 @@ fun HexViewerDialog(
                             ) { rowIndex ->
                                 val offset = rowIndex * 16
                                 val isRowActive = selectedByteOffset / 16 == rowIndex
-
-                                val offsetColor = MaterialTheme.colorScheme.primary
-                                val normalHexColor = MaterialTheme.colorScheme.onSurface
-                                val zeroHexColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                                val ffHexColor = MaterialTheme.colorScheme.tertiary
-                                val asciiColor = MaterialTheme.colorScheme.secondary
-                                val dotColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                                val selectedBgColor = MaterialTheme.colorScheme.primary
-                                val selectedTextColor = MaterialTheme.colorScheme.onPrimary
-                                val modifiedBgColor = Ps2AccentAmber.copy(alpha = 0.35f)
-                                val searchBgColor = MaterialTheme.colorScheme.tertiaryContainer
-                                val searchTextColor = MaterialTheme.colorScheme.onTertiaryContainer
-
                                 var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
                                 val rowAnnotatedString = remember(rowIndex, selectedByteOffset, dataVersion, currentSearchMatchIndex) {
                                     buildAnnotatedString {
                                         // 1. Offset
-                                        pushStyle(SpanStyle(color = offsetColor, fontWeight = if (isRowActive) FontWeight.Bold else FontWeight.Normal))
-                                        append(String.format(Locale.US, "%08X:  ", offset))
+                                        pushStyle(if (isRowActive) offsetActiveSpanStyle else offsetNormalSpanStyle)
+                                        append(formatHexOffset(offset))
                                         pop()
 
                                         // 2. 16 Hex bytes
@@ -812,36 +823,23 @@ fun HexViewerDialog(
                                                         byteIndex >= searchMatches[currentSearchMatchIndex] &&
                                                         byteIndex < searchMatches[currentSearchMatchIndex] + searchMatchLen
 
-                                                when {
-                                                    isByteSelected -> {
-                                                        pushStyle(SpanStyle(background = selectedBgColor, color = selectedTextColor, fontWeight = FontWeight.Bold))
-                                                    }
-                                                    isSearchMatch -> {
-                                                        pushStyle(SpanStyle(background = searchBgColor, color = searchTextColor, fontWeight = FontWeight.Bold))
-                                                    }
-                                                    isModified -> {
-                                                        pushStyle(SpanStyle(background = modifiedBgColor, color = normalHexColor, fontWeight = FontWeight.Bold))
-                                                    }
-                                                    b == 0 -> {
-                                                        pushStyle(SpanStyle(color = zeroHexColor, fontWeight = FontWeight.Normal))
-                                                    }
-                                                    b == 0xFF -> {
-                                                        pushStyle(SpanStyle(color = ffHexColor, fontWeight = FontWeight.Medium))
-                                                    }
-                                                    b in 32..126 -> {
-                                                        pushStyle(SpanStyle(color = asciiColor, fontWeight = FontWeight.Medium))
-                                                    }
-                                                    else -> {
-                                                        pushStyle(SpanStyle(color = normalHexColor, fontWeight = FontWeight.Normal))
-                                                    }
+                                                val style = when {
+                                                    isByteSelected -> selectedSpanStyle
+                                                    isSearchMatch -> searchSpanStyle
+                                                    isModified -> modifiedSpanStyle
+                                                    b == 0 -> zeroHexSpanStyle
+                                                    b == 0xFF -> ffHexSpanStyle
+                                                    b in 32..126 -> asciiHexSpanStyle
+                                                    else -> normalHexSpanStyle
                                                 }
-                                                append(String.format(Locale.US, "%02X", b))
+                                                pushStyle(style)
+                                                append(HEX_STRINGS[b])
                                                 pop()
-                                                append(" ")
+                                                append(' ')
                                             } else {
                                                 append("   ")
                                             }
-                                            if (i == 7) append(" ")
+                                            if (i == 7) append(' ')
                                         }
 
                                         // 3. ASCII column
@@ -857,23 +855,14 @@ fun HexViewerDialog(
                                                         byteIndex >= searchMatches[currentSearchMatchIndex] &&
                                                         byteIndex < searchMatches[currentSearchMatchIndex] + searchMatchLen
 
-                                                when {
-                                                    isByteSelected -> {
-                                                        pushStyle(SpanStyle(background = selectedBgColor, color = selectedTextColor, fontWeight = FontWeight.Bold))
-                                                    }
-                                                    isSearchMatch -> {
-                                                        pushStyle(SpanStyle(background = searchBgColor, color = searchTextColor, fontWeight = FontWeight.Bold))
-                                                    }
-                                                    isModified -> {
-                                                        pushStyle(SpanStyle(background = modifiedBgColor, color = normalHexColor, fontWeight = FontWeight.Bold))
-                                                    }
-                                                    b in 32..126 -> {
-                                                        pushStyle(SpanStyle(color = normalHexColor, fontWeight = FontWeight.Normal))
-                                                    }
-                                                    else -> {
-                                                        pushStyle(SpanStyle(color = dotColor, fontWeight = FontWeight.Normal))
-                                                    }
+                                                val style = when {
+                                                    isByteSelected -> selectedSpanStyle
+                                                    isSearchMatch -> searchSpanStyle
+                                                    isModified -> modifiedSpanStyle
+                                                    b in 32..126 -> normalAsciiSpanStyle
+                                                    else -> dotAsciiSpanStyle
                                                 }
+                                                pushStyle(style)
                                                 if (b in 32..126) append(b.toChar()) else append('.')
                                                 pop()
                                             } else {
@@ -1597,6 +1586,22 @@ private fun parseOffset(input: String): Int? {
     }
 }
 
+private val HEX_STRINGS = Array(256) { String.format(java.util.Locale.US, "%02X", it) }
+private val HEX_DIGITS = "0123456789ABCDEF".toCharArray()
+
+private fun formatHexOffset(offset: Int): String {
+    val chars = CharArray(11)
+    var v = offset
+    for (i in 7 downTo 0) {
+        chars[i] = HEX_DIGITS[v and 0xF]
+        v = v ushr 4
+    }
+    chars[8] = ':'
+    chars[9] = ' '
+    chars[10] = ' '
+    return String(chars)
+}
+
 private fun buildHexDumpText(data: ByteArray, maxRows: Int = 2048): String {
     val sb = StringBuilder()
     sb.appendLine("Offset(h)  00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F  |Decoded text    |")
@@ -1604,15 +1609,16 @@ private fun buildHexDumpText(data: ByteArray, maxRows: Int = 2048): String {
     val rows = minOf((data.size + 15) / 16, maxRows)
     for (r in 0 until rows) {
         val offset = r * 16
-        sb.append(String.format(Locale.US, "%08X:  ", offset))
+        sb.append(formatHexOffset(offset))
         for (i in 0 until 16) {
             val idx = offset + i
             if (idx < data.size) {
-                sb.append(String.format(Locale.US, "%02X ", data[idx]))
+                sb.append(HEX_STRINGS[data[idx].toInt() and 0xFF])
+                sb.append(' ')
             } else {
                 sb.append("   ")
             }
-            if (i == 7) sb.append(" ")
+            if (i == 7) sb.append(' ')
         }
         sb.append(" |")
         for (i in 0 until 16) {
@@ -1633,7 +1639,7 @@ private fun buildRawHexString(data: ByteArray, maxBytes: Int = 32768): String {
     val limit = minOf(data.size, maxBytes)
     val sb = StringBuilder(limit * 2)
     for (i in 0 until limit) {
-        sb.append(String.format(Locale.US, "%02X", data[i]))
+        sb.append(HEX_STRINGS[data[i].toInt() and 0xFF])
     }
     return sb.toString()
 }

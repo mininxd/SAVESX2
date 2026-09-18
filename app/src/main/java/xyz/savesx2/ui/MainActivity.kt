@@ -183,15 +183,7 @@ class MainActivity : ComponentActivity() {
                         MemcardFormatter.createUnformatted(sizeInMB, useEcc)
                     }
 
-                    val out = try {
-                        contentResolver.openOutputStream(targetFile.uri, "wt")
-                    } catch (_: Exception) {
-                        contentResolver.openOutputStream(targetFile.uri, "w")
-                    } ?: throw java.io.IOException("Could not open output stream for writing")
-
-                    out.use { stream ->
-                        stream.write(bytes)
-                    }
+                    writeBytesToSafUriAtomically(targetFile.uri, bytes)
 
                     withContext(Dispatchers.Main) {
                         viewModel.loadCardFromBytes(name, bytes, targetFile.uri)
@@ -217,6 +209,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun writeBytesToSafUriAtomically(targetUri: Uri, data: ByteArray) {
+        val tempFile = File.createTempFile("savesx2_card_atomic_", ".tmp", cacheDir)
+        try {
+            tempFile.outputStream().use { fos ->
+                fos.write(data)
+                fos.flush()
+            }
+            val out = try {
+                contentResolver.openOutputStream(targetUri, "wt")
+            } catch (_: Exception) {
+                contentResolver.openOutputStream(targetUri, "w")
+            } ?: throw java.io.IOException("Could not open output stream for writing")
+
+            out.use { stream ->
+                tempFile.inputStream().use { fis ->
+                    val buffer = ByteArray(64 * 1024)
+                    var bytesRead: Int
+                    while (fis.read(buffer).also { bytesRead = it } != -1) {
+                        stream.write(buffer, 0, bytesRead)
+                    }
+                    stream.flush()
+                }
+            }
+        } finally {
+            tempFile.delete()
+        }
+    }
+
     private fun saveLoadedCardToDirectory(dirUri: Uri, dirName: String) {
         val loaded = viewModel.uiState.value as? CardUiState.Loaded ?: return
         val rawData = loaded.memcard.getRawDataDirect()
@@ -228,15 +248,7 @@ class MainActivity : ComponentActivity() {
                     val docDir = DocumentFile.fromTreeUri(this@MainActivity, dirUri)
                     val targetFile = docDir?.findFile(cardName) ?: docDir?.createFile("application/octet-stream", cardName)
                     if (targetFile != null) {
-                        val out = try {
-                            contentResolver.openOutputStream(targetFile.uri, "wt")
-                        } catch (_: Exception) {
-                            contentResolver.openOutputStream(targetFile.uri, "w")
-                        } ?: throw java.io.IOException("Could not open output stream for writing")
-
-                        out.use { stream ->
-                            stream.write(rawData)
-                        }
+                        writeBytesToSafUriAtomically(targetFile.uri, rawData)
                         withContext(Dispatchers.Main) {
                             viewModel.markCardSaved(targetFile.uri, cardName, this@MainActivity)
                             showToast("Saved $cardName to $dirName successfully!")
@@ -459,9 +471,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val appVersion = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.1"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.2"
         } catch (_: Exception) {
-            "1.7.1"
+            "1.7.2"
         }
         viewModel.checkUpdate(appVersion)
 
@@ -671,9 +683,9 @@ class MainActivity : ComponentActivity() {
                                     updateStatus = updateStatus,
                                     onCheckUpdate = {
                                          val version = try {
-                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.1"
+                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.2"
                                          } catch (e: Exception) {
-                                             "1.7.1"
+                                             "1.7.2"
                                          }
                                         viewModel.checkUpdate(version)
                                     }
@@ -929,9 +941,9 @@ class MainActivity : ComponentActivity() {
                         onClearRecentCards = { viewModel.clearRecentCards(this@MainActivity) },
                         onDismiss = { viewModel.setShowSettingsDialog(false) },
                         versionName = try {
-                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.1"
+                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.2"
                         } catch (_: Exception) {
-                            "1.7.1"
+                            "1.7.2"
                         }
                     )
                 }
@@ -1080,15 +1092,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.setLoading("Saving $cardName...")
                 withContext(Dispatchers.IO) {
                     try {
-                        val out = try {
-                            contentResolver.openOutputStream(cardUri, "wt")
-                        } catch (_: Exception) {
-                            contentResolver.openOutputStream(cardUri, "w")
-                        } ?: throw java.io.IOException("Could not open output stream for writing")
-
-                        out.use { stream ->
-                            stream.write(rawData)
-                        }
+                        writeBytesToSafUriAtomically(cardUri, rawData)
                         withContext(Dispatchers.Main) {
                             viewModel.markCardSaved(cardUri, cardName, this@MainActivity)
                             showToast("Saved $cardName successfully!")
