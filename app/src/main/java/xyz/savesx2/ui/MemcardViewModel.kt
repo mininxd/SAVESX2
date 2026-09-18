@@ -105,6 +105,7 @@ class CardSnapshot private constructor(
     private val rawOrCompressedData: ByteArray,
     val uncompressedSize: Int,
     val isCompressed: Boolean,
+    val crc: Long,
     val actionDescription: String
 ) {
     val compressedSizeBytes: Int get() = rawOrCompressedData.size
@@ -112,9 +113,19 @@ class CardSnapshot private constructor(
     val data: ByteArray
         get() = if (isCompressed) decompress(rawOrCompressedData, uncompressedSize) else rawOrCompressedData.copyOf()
 
+    fun matches(otherData: ByteArray, otherCrc: Long): Boolean {
+        if (uncompressedSize != otherData.size || crc != otherCrc) return false
+        return if (!isCompressed) {
+            rawOrCompressedData.contentEquals(otherData)
+        } else {
+            data.contentEquals(otherData)
+        }
+    }
+
     companion object {
         fun create(data: ByteArray, actionDescription: String): CardSnapshot {
-            if (data.isEmpty()) return CardSnapshot(ByteArray(0), 0, false, actionDescription)
+            if (data.isEmpty()) return CardSnapshot(ByteArray(0), 0, false, 0L, actionDescription)
+            val crc = java.util.zip.CRC32().apply { update(data) }.value
             val deflater = Deflater(Deflater.BEST_SPEED)
             return try {
                 deflater.setInput(data)
@@ -125,9 +136,9 @@ class CardSnapshot private constructor(
                     val count = deflater.deflate(buffer)
                     bos.write(buffer, 0, count)
                 }
-                CardSnapshot(bos.toByteArray(), data.size, true, actionDescription)
+                CardSnapshot(bos.toByteArray(), data.size, true, crc, actionDescription)
             } catch (_: Throwable) {
-                CardSnapshot(data.copyOf(), data.size, false, actionDescription)
+                CardSnapshot(data.copyOf(), data.size, false, crc, actionDescription)
             } finally {
                 deflater.end()
             }
@@ -202,42 +213,7 @@ class MemcardViewModel : ViewModel() {
     private val _canRedo = MutableStateFlow(false)
     val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
 
-    private fun getMaxUndoHistory(cardSizeBytes: Int): Int {
-        val sizeMb = cardSizeBytes / (1024 * 1024)
-        return when {
-            sizeMb <= 8 -> 10
-            sizeMb <= 16 -> 6
-            sizeMb <= 32 -> 4
-            sizeMb <= 64 -> 2
-            else -> 1
-        }
-    }
-
-    private fun pruneHistoryLocked(cardSizeBytes: Int) {
-        val maxCount = getMaxUndoHistory(cardSizeBytes)
-        val maxBudget = when {
-            cardSizeBytes <= 8 * 1024 * 1024 -> 30 * 1024 * 1024
-            cardSizeBytes <= 32 * 1024 * 1024 -> 40 * 1024 * 1024
-            else -> 50 * 1024 * 1024
-        }
-
-        while (undoStack.size > maxCount) {
-            undoStack.removeFirst()
-        }
-        while (redoStack.size > maxCount) {
-            redoStack.removeFirst()
-        }
-
-        fun totalSize(): Int = undoStack.sumOf { it.compressedSizeBytes } + redoStack.sumOf { it.compressedSizeBytes }
-
-        while (totalSize() > maxBudget && undoStack.size > 1) {
-            undoStack.removeFirst()
-        }
-        while (totalSize() > maxBudget && redoStack.isNotEmpty()) {
-            redoStack.removeFirst()
-        }
-    }
-
+    private val maxUndoHistory = 10
     private val undoStack = ArrayDeque<CardSnapshot>()
     private val redoStack = ArrayDeque<CardSnapshot>()
     private var savedCardCrc: Long? = null
@@ -455,14 +431,40 @@ class MemcardViewModel : ViewModel() {
         return crc.value
     }
 
-    private fun pushUndoSnapshot(snapshot: ByteArray, actionDescription: String) {
-        val cardSnapshot = CardSnapshot.create(snapshot, actionDescription)
+    private fun pushUndoSnapshot(
+        snapshot: ByteArray,
+        actionDescription: String,
+        currentData: ByteArray? = null
+    ): Boolean {
+        val currentBytes = currentData ?: currentLoadedCard?.memcard?.getRawDataDirect()
         synchronized(historyLock) {
+            // Check if this action returned the card to the state before the latest undo snapshot
+            if (currentBytes != null && undoStack.isNotEmpty()) {
+                val currentCrc = calculateCrc(currentBytes)
+                val lastSnapshot = undoStack.last()
+                if (lastSnapshot.matches(currentBytes, currentCrc)) {
+                    // Action reverted the latest change: pop snapshot to revert the undo total
+                    undoStack.removeLast()
+                    redoStack.clear()
+                    _canUndo.value = undoStack.isNotEmpty()
+                    _canRedo.value = false
+                    val isAtSavedBaseline = savedCardCrc != null && currentCrc == savedCardCrc
+                    val currentLoaded = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard
+                    _hasUnsavedChanges.value = if (currentLoaded?.cardUri == null) true else !isAtSavedBaseline
+                    return true
+                }
+            }
+
+            val cardSnapshot = CardSnapshot.create(snapshot, actionDescription)
+            if (undoStack.size >= maxUndoHistory) {
+                undoStack.removeFirst()
+            }
             undoStack.addLast(cardSnapshot)
             redoStack.clear()
-            pruneHistoryLocked(snapshot.size)
             _canUndo.value = true
             _canRedo.value = false
+            _hasUnsavedChanges.value = true
+            return false
         }
     }
 
@@ -490,8 +492,10 @@ class MemcardViewModel : ViewModel() {
                             }
                             val snap = undoStack.removeLast()
                             val redoSnapshot = CardSnapshot.create(currentBytes, snap.actionDescription)
+                            if (redoStack.size >= maxUndoHistory) {
+                                redoStack.removeFirst()
+                            }
                             redoStack.addLast(redoSnapshot)
-                            pruneHistoryLocked(currentBytes.size)
                             _canUndo.value = undoStack.isNotEmpty()
                             _canRedo.value = true
                             snap
@@ -535,8 +539,10 @@ class MemcardViewModel : ViewModel() {
                             }
                             val snap = redoStack.removeLast()
                             val undoSnapshot = CardSnapshot.create(currentBytes, snap.actionDescription)
+                            if (undoStack.size >= maxUndoHistory) {
+                                undoStack.removeFirst()
+                            }
                             undoStack.addLast(undoSnapshot)
-                            pruneHistoryLocked(currentBytes.size)
                             _canUndo.value = true
                             _canRedo.value = redoStack.isNotEmpty()
                             snap
@@ -736,12 +742,11 @@ class MemcardViewModel : ViewModel() {
                         if (isRawCard) {
                             val newCard = Ps2Memcard.open(newData)
                             if (newCard != null) {
-                                pushUndoSnapshot(snapshotBefore, "Raw hex edit on ${current.cardName}")
+                                val wasReverted = pushUndoSnapshot(snapshotBefore, "Raw hex edit on ${current.cardName}", newCard.getRawDataDirect())
                                 val saves = newCard.listSaves()
                                 val stats = newCard.getStats()
-                                _hasUnsavedChanges.value = true
                                 setLoadedState(current.copy(memcard = newCard, saves = saves, stats = stats))
-                                _snackbarMessage.value = "Updated raw card data"
+                                _snackbarMessage.value = if (wasReverted) "Reverted raw card edit" else "Updated raw card data"
                                 _hexViewerData.value = null
                                 _hexEditorSession.value = null
                             } else {
@@ -753,16 +758,15 @@ class MemcardViewModel : ViewModel() {
                         if (saveName != null && fileName != null) {
                             val ok = current.memcard.updateSaveFile(saveName, fileName, newData)
                             if (ok) {
-                                pushUndoSnapshot(snapshotBefore, "Edit $fileName in $saveName")
+                                val wasReverted = pushUndoSnapshot(snapshotBefore, "Edit $fileName in $saveName", current.memcard.getRawDataDirect())
                                 val saves = current.memcard.listSaves()
                                 val stats = current.memcard.getStats()
-                                _hasUnsavedChanges.value = true
                                 val updatedSave = saves.firstOrNull { it.directoryName == saveName }
                                 setLoadedState(current.copy(saves = saves, stats = stats))
                                 if (_selectedSave.value?.directoryName == saveName) {
                                     _selectedSave.value = updatedSave
                                 }
-                                _snackbarMessage.value = "Saved changes to $fileName"
+                                _snackbarMessage.value = if (wasReverted) "Reverted edit to $fileName" else "Saved changes to $fileName"
                                 _hexViewerData.value = null
                                 _hexEditorSession.value = null
                             } else {
@@ -792,16 +796,17 @@ class MemcardViewModel : ViewModel() {
                         val ok = current.memcard.setSaveProtection(saveName, isProtected)
                         if (ok) {
                             val actionDesc = if (isProtected) "Protect $saveName" else "Unprotect $saveName"
-                            pushUndoSnapshot(snapshotBefore, actionDesc)
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
-                            _hasUnsavedChanges.value = true
                             val updatedSave = saves.firstOrNull { it.directoryName == saveName }
                             setLoadedState(current.copy(saves = saves, stats = stats))
                             if (_selectedSave.value?.directoryName == saveName) {
                                 _selectedSave.value = updatedSave
                             }
-                            _snackbarMessage.value = if (isProtected) {
+                            _snackbarMessage.value = if (wasReverted) {
+                                if (isProtected) "Reverted lock on $saveName" else "Reverted unlock on $saveName"
+                            } else if (isProtected) {
                                 "Marked $saveName as copy-protected"
                             } else {
                                 "Removed copy-protection from $saveName"
@@ -824,16 +829,15 @@ class MemcardViewModel : ViewModel() {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
                         val ok = current.memcard.updateSaveTimestamps(saveName, created, modified)
                         if (ok) {
-                            pushUndoSnapshot(snapshotBefore, "Edit timestamps for $saveName")
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Edit timestamps for $saveName", current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
-                            _hasUnsavedChanges.value = true
                             val updatedSave = saves.firstOrNull { it.directoryName == saveName }
                             setLoadedState(current.copy(saves = saves, stats = stats))
                             if (_selectedSave.value?.directoryName == saveName) {
                                 _selectedSave.value = updatedSave
                             }
-                            _snackbarMessage.value = "Updated timestamps for $saveName"
+                            _snackbarMessage.value = if (wasReverted) "Reverted timestamp edit for $saveName" else "Updated timestamps for $saveName"
                         }
                     } catch (t: Throwable) {
                         _snackbarMessage.value = "Timestamp update error: ${t.message ?: "Failed"}"
@@ -1111,8 +1115,7 @@ class MemcardViewModel : ViewModel() {
                         val bytes = MemcardFormatter.format(sizeInMB, current.memcard.hasEcc)
                         val card = Ps2Memcard.open(bytes)
                         if (card != null) {
-                            pushUndoSnapshot(snapshotBefore, "Format card")
-                            _hasUnsavedChanges.value = true
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Format card", card.getRawDataDirect())
                             val loaded = CardUiState.Loaded(
                                 cardName = current.cardName,
                                 cardUri = current.cardUri,
@@ -1121,7 +1124,7 @@ class MemcardViewModel : ViewModel() {
                                 stats = card.getStats()
                             )
                             setLoadedState(loaded)
-                            _snackbarMessage.value = "Memory card formatted successfully."
+                            _snackbarMessage.value = if (wasReverted) "Reverted format card" else "Memory card formatted successfully."
                         }
                     } catch (t: Throwable) {
                         _uiState.value = CardUiState.Error("Format error: ${t.message ?: "Out of memory"}")
@@ -1151,8 +1154,7 @@ class MemcardViewModel : ViewModel() {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
                         val success = current.memcard.resize(newSizeMb)
                         if (success) {
-                            pushUndoSnapshot(snapshotBefore, "Resize card to ${newSizeMb}MB")
-                            _hasUnsavedChanges.value = true
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Resize card to ${newSizeMb}MB", current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves(forceRefresh = true)
                             val stats = current.memcard.getStats()
                             val loaded = CardUiState.Loaded(
@@ -1163,7 +1165,7 @@ class MemcardViewModel : ViewModel() {
                                 stats = stats
                             )
                             setLoadedState(loaded)
-                            _snackbarMessage.value = "Memory card expanded to ${newSizeMb}MB successfully."
+                            _snackbarMessage.value = if (wasReverted) "Reverted resize card" else "Memory card expanded to ${newSizeMb}MB successfully."
                         } else {
                             val reloaded = CardUiState.Loaded(
                                 cardName = current.cardName,
@@ -1192,14 +1194,13 @@ class MemcardViewModel : ViewModel() {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
                         val success = current.memcard.deleteSave(saveName)
                         if (success) {
-                            pushUndoSnapshot(snapshotBefore, "Delete save $saveName")
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Delete save $saveName", current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             _selectedSave.value = null
-                            _hasUnsavedChanges.value = true
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = "Deleted save $saveName"
+                            _snackbarMessage.value = if (wasReverted) "Reverted deletion of $saveName" else "Deleted save $saveName"
                         } else {
                             _snackbarMessage.value = "Failed to delete save $saveName"
                         }
@@ -1230,11 +1231,10 @@ class MemcardViewModel : ViewModel() {
                             val stats = current.memcard.getStats()
                             val newSave = saves.firstOrNull { old -> current.saves.none { it.directoryName == old.directoryName } }
                             val actionDesc = if (newSave != null) "Import save ${newSave.directoryName}" else "Import save"
-                            pushUndoSnapshot(snapshotBefore, actionDesc)
-                            _hasUnsavedChanges.value = true
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = if (newSave != null) "Imported save '${newSave.directoryName}' successfully!" else "Imported save successfully!"
+                            _snackbarMessage.value = if (wasReverted) "Reverted import of '${newSave?.directoryName ?: "save"}'" else if (newSave != null) "Imported save '${newSave.directoryName}' successfully!" else "Imported save successfully!"
                         } else {
                             setLoadedState(current)
                             _snackbarMessage.value = "Failed to import save (insufficient space or invalid format)."
@@ -1299,11 +1299,10 @@ class MemcardViewModel : ViewModel() {
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             val actionDesc = "Import save ${saveDir.name}"
-                            pushUndoSnapshot(snapshotBefore, actionDesc)
-                            _hasUnsavedChanges.value = true
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = "Imported save ${saveDir.name} successfully!"
+                            _snackbarMessage.value = if (wasReverted) "Reverted import of '${saveDir.name}'" else "Imported save ${saveDir.name} successfully!"
                         } else {
                             setLoadedState(current)
                             _snackbarMessage.value = "Failed to import save folder (insufficient space or invalid format)."
