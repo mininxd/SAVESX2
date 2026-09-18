@@ -127,23 +127,25 @@ fun HexViewerDialog(
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Internal editable data buffer
-    val currentBytes = remember(data) { data.copyOf() }
-    val initialData = remember(data) { data.copyOf() }
+    // Internal editable data buffer - avoids duplicating memory in read-only mode
+    val currentBytes = remember(data) { if (isReadOnly) data else data.copyOf() }
+    val initialData = remember(data) { if (isReadOnly) data else data.copyOf() }
     var dataVersion by remember { mutableIntStateOf(0) }
 
     // Undo / Redo stacks
     val undoStack = remember { mutableStateListOf<HexEditAction>() }
     val redoStack = remember { mutableStateListOf<HexEditAction>() }
-    val modifiedOffsets = remember { mutableStateListOf<Int>() }
+    var modifiedOffsets by remember { mutableStateOf<Set<Int>>(emptySet()) }
 
     fun refreshModifiedOffsets() {
-        modifiedOffsets.clear()
+        if (isReadOnly) return
+        val newSet = HashSet<Int>()
         for (i in currentBytes.indices) {
             if (i < initialData.size && currentBytes[i] != initialData[i]) {
-                modifiedOffsets.add(i)
+                newSet.add(i)
             }
         }
+        modifiedOffsets = newSet
     }
 
     fun applySingleByteEdit(targetOffset: Int, newByte: Byte) {
@@ -204,10 +206,12 @@ fun HexViewerDialog(
     }
 
     fun performRevert() {
-        System.arraycopy(initialData, 0, currentBytes, 0, minOf(initialData.size, currentBytes.size))
+        if (!isReadOnly) {
+            System.arraycopy(initialData, 0, currentBytes, 0, minOf(initialData.size, currentBytes.size))
+        }
         undoStack.clear()
         redoStack.clear()
-        modifiedOffsets.clear()
+        modifiedOffsets = emptySet()
         dataVersion++
         Toast.makeText(context, "Reverted all modifications", Toast.LENGTH_SHORT).show()
     }

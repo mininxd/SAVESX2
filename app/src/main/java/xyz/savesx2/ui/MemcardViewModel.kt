@@ -24,7 +24,12 @@ import xyz.savesx2.core.UpdateChecker
 import xyz.savesx2.core.UpdateStatus
 import xyz.savesx2.core.ZipSaveHandler
 import java.io.File
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -102,6 +107,8 @@ class CardSnapshot private constructor(
     val isCompressed: Boolean,
     val actionDescription: String
 ) {
+    val compressedSizeBytes: Int get() = rawOrCompressedData.size
+
     val data: ByteArray
         get() = if (isCompressed) decompress(rawOrCompressedData, uncompressedSize) else rawOrCompressedData.copyOf()
 
@@ -195,7 +202,42 @@ class MemcardViewModel : ViewModel() {
     private val _canRedo = MutableStateFlow(false)
     val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
 
-    private val maxUndoHistory = 10
+    private fun getMaxUndoHistory(cardSizeBytes: Int): Int {
+        val sizeMb = cardSizeBytes / (1024 * 1024)
+        return when {
+            sizeMb <= 8 -> 10
+            sizeMb <= 16 -> 6
+            sizeMb <= 32 -> 4
+            sizeMb <= 64 -> 2
+            else -> 1
+        }
+    }
+
+    private fun pruneHistoryLocked(cardSizeBytes: Int) {
+        val maxCount = getMaxUndoHistory(cardSizeBytes)
+        val maxBudget = when {
+            cardSizeBytes <= 8 * 1024 * 1024 -> 30 * 1024 * 1024
+            cardSizeBytes <= 32 * 1024 * 1024 -> 40 * 1024 * 1024
+            else -> 50 * 1024 * 1024
+        }
+
+        while (undoStack.size > maxCount) {
+            undoStack.removeFirst()
+        }
+        while (redoStack.size > maxCount) {
+            redoStack.removeFirst()
+        }
+
+        fun totalSize(): Int = undoStack.sumOf { it.compressedSizeBytes } + redoStack.sumOf { it.compressedSizeBytes }
+
+        while (totalSize() > maxBudget && undoStack.size > 1) {
+            undoStack.removeFirst()
+        }
+        while (totalSize() > maxBudget && redoStack.isNotEmpty()) {
+            redoStack.removeFirst()
+        }
+    }
+
     private val undoStack = ArrayDeque<CardSnapshot>()
     private val redoStack = ArrayDeque<CardSnapshot>()
     private var savedCardCrc: Long? = null
@@ -296,10 +338,83 @@ class MemcardViewModel : ViewModel() {
     }
 
     private var currentLoadedCard: CardUiState.Loaded? = null
+    private var iconPreloadJob: Job? = null
 
-    private fun setLoadedState(loaded: CardUiState.Loaded) {
+    private fun setLoadedState(loaded: CardUiState.Loaded, triggerIconPreload: Boolean = true) {
         currentLoadedCard = loaded
         _uiState.value = loaded
+        if (triggerIconPreload) {
+            startIconPreloading(loaded.saves, loaded.memcard)
+        }
+    }
+
+    private fun startIconPreloading(saves: List<Ps2Save>, card: Ps2Memcard) {
+        iconPreloadJob?.cancel()
+        val savesNeedingIcons = saves.filter { it.iconBitmap == null }
+        if (savesNeedingIcons.isEmpty()) return
+
+        iconPreloadJob = viewModelScope.launch(Dispatchers.Default) {
+            val batch = mutableMapOf<String, Bitmap>()
+            var lastFlushTime = System.currentTimeMillis()
+
+            for (save in savesNeedingIcons) {
+                if (!isActive) break
+                val bmp = card.decodeSaveIcon(save)
+                if (bmp != null) {
+                    batch[save.directoryName] = bmp
+                }
+                val now = System.currentTimeMillis()
+                if (batch.size >= 3 || (now - lastFlushTime >= 200 && batch.isNotEmpty())) {
+                    val batchToApply = batch.toMap()
+                    batch.clear()
+                    lastFlushTime = now
+                    withContext(Dispatchers.Main.immediate) {
+                        applyIconBatchToState(batchToApply)
+                    }
+                }
+                delay(16)
+            }
+            if (batch.isNotEmpty()) {
+                val remaining = batch.toMap()
+                withContext(Dispatchers.Main.immediate) {
+                    applyIconBatchToState(remaining)
+                }
+            }
+        }
+    }
+
+    private fun applyIconBatchToState(icons: Map<String, Bitmap>) {
+        if (icons.isEmpty()) return
+        val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return
+        val updatedSaves = current.saves.map { s ->
+            val bmp = icons[s.directoryName]
+            if (bmp != null && s.iconBitmap == null) {
+                s.copy(iconBitmap = bmp, iconImageBitmap = bmp.asImageBitmap())
+            } else {
+                s
+            }
+        }
+        val updatedLoaded = current.copy(saves = updatedSaves)
+        setLoadedState(updatedLoaded, triggerIconPreload = false)
+
+        val sel = _selectedSave.value
+        if (sel != null && icons.containsKey(sel.directoryName)) {
+            val bmp = icons[sel.directoryName]
+            if (bmp != null && sel.iconBitmap == null) {
+                _selectedSave.value = sel.copy(iconBitmap = bmp, iconImageBitmap = bmp.asImageBitmap())
+            }
+        }
+    }
+
+    suspend fun loadSaveIcon(save: Ps2Save): Bitmap? = withContext(Dispatchers.Default) {
+        val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withContext null
+        val bmp = current.memcard.decodeSaveIcon(save)
+        if (bmp != null && save.iconBitmap == null) {
+            withContext(Dispatchers.Main.immediate) {
+                applyIconBatchToState(mapOf(save.directoryName to bmp))
+            }
+        }
+        bmp
     }
 
     fun setCustomDirectory(uri: Uri?, name: String?) {
@@ -343,11 +458,9 @@ class MemcardViewModel : ViewModel() {
     private fun pushUndoSnapshot(snapshot: ByteArray, actionDescription: String) {
         val cardSnapshot = CardSnapshot.create(snapshot, actionDescription)
         synchronized(historyLock) {
-            if (undoStack.size >= maxUndoHistory) {
-                undoStack.removeFirst()
-            }
             undoStack.addLast(cardSnapshot)
             redoStack.clear()
+            pruneHistoryLocked(snapshot.size)
             _canUndo.value = true
             _canRedo.value = false
         }
@@ -377,10 +490,8 @@ class MemcardViewModel : ViewModel() {
                             }
                             val snap = undoStack.removeLast()
                             val redoSnapshot = CardSnapshot.create(currentBytes, snap.actionDescription)
-                            if (redoStack.size >= maxUndoHistory) {
-                                redoStack.removeFirst()
-                            }
                             redoStack.addLast(redoSnapshot)
+                            pruneHistoryLocked(currentBytes.size)
                             _canUndo.value = undoStack.isNotEmpty()
                             _canRedo.value = true
                             snap
@@ -424,10 +535,8 @@ class MemcardViewModel : ViewModel() {
                             }
                             val snap = redoStack.removeLast()
                             val undoSnapshot = CardSnapshot.create(currentBytes, snap.actionDescription)
-                            if (undoStack.size >= maxUndoHistory) {
-                                undoStack.removeFirst()
-                            }
                             undoStack.addLast(undoSnapshot)
+                            pruneHistoryLocked(currentBytes.size)
                             _canUndo.value = true
                             _canRedo.value = redoStack.isNotEmpty()
                             snap
@@ -1240,6 +1349,7 @@ class MemcardViewModel : ViewModel() {
 
 
     fun closeCard() {
+        iconPreloadJob?.cancel()
         currentLoadedCard = null
         _uiState.value = CardUiState.Empty
         savedCardCrc = null
@@ -1248,5 +1358,11 @@ class MemcardViewModel : ViewModel() {
         _hasUnsavedChanges.value = false
         _selectedSave.value = null
         _searchQuery.value = ""
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        iconPreloadJob?.cancel()
+        clearUndoRedoHistory()
     }
 }

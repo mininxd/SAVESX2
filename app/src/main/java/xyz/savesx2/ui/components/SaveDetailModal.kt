@@ -41,12 +41,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import android.graphics.Bitmap
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,10 +77,24 @@ fun SaveDetailModal(
     onToggleProtection: (Boolean) -> Unit = {},
     onEditTimestamps: () -> Unit = {},
     onInspectFileHex: (Ps2SaveFile) -> Unit,
-    onView3dIcon: (() -> Unit)? = null
+    onView3dIcon: (() -> Unit)? = null,
+    onLoadIcon: (suspend (Ps2Save) -> Bitmap?)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val has3dIcon = save.files.any { it.name.endsWith(".icn", ignoreCase = true) || it.name.endsWith(".ico", ignoreCase = true) }
+
+    var localImageBitmap by remember(save.directoryName) { mutableStateOf(save.iconImageBitmap) }
+
+    LaunchedEffect(save.directoryName, save.iconImageBitmap) {
+        if (save.iconImageBitmap != null) {
+            localImageBitmap = save.iconImageBitmap
+        } else if (localImageBitmap == null && onLoadIcon != null) {
+            val bmp = onLoadIcon(save)
+            if (bmp != null) {
+                localImageBitmap = bmp.asImageBitmap()
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -91,7 +108,7 @@ fun SaveDetailModal(
                 .padding(bottom = 24.dp)
         ) {
             // Header
-            val imageBitmap = save.iconImageBitmap
+            val imageBitmap = localImageBitmap ?: save.iconImageBitmap
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically

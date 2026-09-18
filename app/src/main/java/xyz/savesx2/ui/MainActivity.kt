@@ -738,7 +738,8 @@ class MainActivity : ComponentActivity() {
                                     onSaveCard = onSaveCard,
                                     onFormatCard = onFormatCard,
                                     isRefreshing = isRefreshing,
-                                    onRefresh = onRefresh
+                                    onRefresh = onRefresh,
+                                    onLoadIcon = { viewModel.loadSaveIcon(it) }
                                 )
                             }
                             is CardUiState.Error -> {
@@ -811,7 +812,8 @@ class MainActivity : ComponentActivity() {
                         },
                         onView3dIcon = {
                             viewModel.open3dIconViewer(save)
-                        }
+                        },
+                        onLoadIcon = { viewModel.loadSaveIcon(it) }
                     )
                 }
 

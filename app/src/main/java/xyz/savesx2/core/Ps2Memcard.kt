@@ -596,15 +596,17 @@ class Ps2Memcard private constructor(
                 )
 
                 val cacheKey = "ps1:$saveName:${dirEntry.length}"
-                var ps1Title: String? = null
+                val headerData = try {
+                    readFile(dirEntry.cluster, minOf(dirEntry.length, 512L))
+                } catch (_: Throwable) {
+                    null
+                }
+                val ps1Title = if (headerData != null && headerData.isNotEmpty()) {
+                    Ps2IconDecoder.extractPs1Title(headerData)
+                } else null
+
                 val iconBitmap = Ps2IconDecoder.getCached(cacheKey) ?: run {
-                    val headerData = try {
-                        readFile(dirEntry.cluster, minOf(dirEntry.length, 512L))
-                    } catch (_: Throwable) {
-                        null
-                    }
                     if (headerData != null && headerData.isNotEmpty()) {
-                        ps1Title = Ps2IconDecoder.extractPs1Title(headerData)
                         Ps2IconDecoder.decodePs1Icon(headerData, cacheKey = cacheKey)
                     } else null
                 }
@@ -675,23 +677,14 @@ class Ps2Memcard private constructor(
         val gameTitle = iconSys?.title?.trim()?.ifBlank { null } ?: saveName
         val subtitle = iconSys?.subtitle?.trim() ?: ""
 
-        // Decode save icon (3D model rasterized into 2D static image) into Bitmap if icon file exists
+        // Use cached icon if already rendered in memory; otherwise defer 3D rendering to async loader
         val iconFileName = iconSys?.iconFile?.trim()?.ifBlank { null }
             ?: subEntries.firstOrNull { it.isExists && (it.name.endsWith(".icn", ignoreCase = true) || it.name.endsWith(".ico", ignoreCase = true)) }?.name
         val iconBitmap = if (iconFileName != null) {
             val iconEntry = subEntries.firstOrNull { it.isExists && it.name.equals(iconFileName, ignoreCase = true) }
             if (iconEntry != null && iconEntry.cluster != 0xFFFFFFFFL && iconEntry.length > 0) {
                 val cacheKey = "ps2:$saveName:${iconEntry.name}:${iconEntry.length}"
-                Ps2IconDecoder.getCached(cacheKey) ?: run {
-                    val iconData = readFile(iconEntry.cluster, iconEntry.length)
-                    if (iconData.isNotEmpty()) {
-                        try {
-                            Ps2IconDecoder.decodePs2Icon(iconData, iconSys = iconSys, cacheKey = cacheKey)
-                        } catch (_: Throwable) {
-                            null
-                        }
-                    } else null
-                }
+                Ps2IconDecoder.getCached(cacheKey)
             } else null
         } else null
 
@@ -711,6 +704,61 @@ class Ps2Memcard private constructor(
             iconSys = iconSys,
             iconBitmap = iconBitmap
         )
+    }
+
+    /**
+     * Decodes the save icon (PS2 3D polygonal mesh or PS1 CLUT4 icon) on demand and caches it.
+     * Safe to invoke from background coroutine dispatchers.
+     */
+    fun decodeSaveIcon(save: Ps2Save): Bitmap? {
+        if (save.iconBitmap != null) return save.iconBitmap
+
+        // PS1 save file
+        if (save.isPsx || (!save.dirEntry.isDirectory && save.dirEntry.length > 0)) {
+            val cacheKey = "ps1:${save.directoryName}:${save.dirEntry.length}"
+            Ps2IconDecoder.getCached(cacheKey)?.let { return it }
+            val headerData = try {
+                readFile(save.dirEntry.cluster, minOf(save.dirEntry.length, 512L))
+            } catch (_: Throwable) {
+                null
+            }
+            if (headerData != null && headerData.isNotEmpty()) {
+                return Ps2IconDecoder.decodePs1Icon(headerData, cacheKey = cacheKey)
+            }
+            return null
+        }
+
+        // PS2 save folder
+        val iconFileName = save.iconSys?.iconFile?.trim()?.ifBlank { null }
+            ?: save.files.firstOrNull { it.name.endsWith(".icn", ignoreCase = true) || it.name.endsWith(".ico", ignoreCase = true) }?.name
+            ?: return null
+
+        val iconEntry = save.files.firstOrNull { it.name.equals(iconFileName, ignoreCase = true) }?.dirEntry
+            ?: run {
+                if (save.dirEntry.cluster in 0 until superBlock.allocatableClusters) {
+                    readDirents(save.dirEntry.cluster).firstOrNull { it.isExists && it.name.equals(iconFileName, ignoreCase = true) }
+                } else null
+            } ?: return null
+
+        if (iconEntry.cluster == 0xFFFFFFFFL || iconEntry.length <= 0) return null
+
+        val cacheKey = "ps2:${save.directoryName}:${iconEntry.name}:${iconEntry.length}"
+        Ps2IconDecoder.getCached(cacheKey)?.let { return it }
+
+        val iconData = try {
+            readFile(iconEntry.cluster, iconEntry.length)
+        } catch (_: Throwable) {
+            null
+        } ?: return null
+
+        if (iconData.isNotEmpty()) {
+            return try {
+                Ps2IconDecoder.decodePs2Icon(iconData, iconSys = save.iconSys, cacheKey = cacheKey)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+        return null
     }
 
     /**

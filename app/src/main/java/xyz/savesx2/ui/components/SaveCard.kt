@@ -29,7 +29,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,6 +52,7 @@ fun SaveCard(
     onExportPsu: (Ps2Save) -> Unit,
     onExportZip: (Ps2Save) -> Unit,
     onDelete: (Ps2Save) -> Unit,
+    onLoadIcon: (suspend (Ps2Save) -> Bitmap?)? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -58,7 +62,20 @@ fun SaveCard(
     val handleExportZip = remember(save, onExportZip) { { onExportZip(save) } }
     val handleDelete = remember(save, onDelete) { { onDelete(save) } }
 
-    val imageBitmap = save.iconImageBitmap
+    var localImageBitmap by remember(save.directoryName) { mutableStateOf(save.iconImageBitmap) }
+
+    LaunchedEffect(save.directoryName, save.iconImageBitmap) {
+        if (save.iconImageBitmap != null) {
+            localImageBitmap = save.iconImageBitmap
+        } else if (localImageBitmap == null && onLoadIcon != null) {
+            val bmp = onLoadIcon(save)
+            if (bmp != null) {
+                localImageBitmap = bmp.asImageBitmap()
+            }
+        }
+    }
+
+    val imageBitmap = localImageBitmap ?: save.iconImageBitmap
 
     Surface(
         onClick = handleCardClick,

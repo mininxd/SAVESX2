@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import android.graphics.Bitmap
 import xyz.savesx2.core.CardStats
 import xyz.savesx2.core.Ps2Save
 import xyz.savesx2.ui.FilterType
@@ -72,6 +73,7 @@ fun MainScreen(
     onFormatCard: () -> Unit = {},
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
+    onLoadIcon: (suspend (Ps2Save) -> Bitmap?)? = null,
     modifier: Modifier = Modifier
 ) {
     val filteredSaves = remember(saves, searchQuery, filterType, sortBy) {
@@ -283,7 +285,8 @@ fun MainScreen(
                                 onClick = onSaveClick,
                                 onExportPsu = onExportPsu,
                                 onExportZip = onExportZip,
-                                onDelete = onDeleteSave
+                                onDelete = onDeleteSave,
+                                onLoadIcon = onLoadIcon
                             )
                         }
                     }
