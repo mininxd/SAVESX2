@@ -1,3 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-surface: var(--surface);
+  --color-surface-container: var(--surface-container);
+  --color-surface-low: var(--surface-low);
+  --color-surface-high: var(--surface-high);
+  --color-surface-highest: var(--surface-highest);
+  --color-outline: var(--outline);
+  --color-outline-variant: var(--outline-variant);
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-heading: "Chakra Petch", system-ui, sans-serif;
+}
+
 /* ============================================================
    SAVESX2 website — Retro gamer patch over Material 3
    Design rules:
@@ -96,6 +112,17 @@
   --hero-glow: rgba(0, 67, 156, 0.08);
 
   --topbar-bg: rgba(249, 249, 254, 0.92);
+
+  --badge-us-bg: #d6e4ff;
+  --badge-us-fg: #003a70;
+  --badge-eu-bg: #d1f2d9;
+  --badge-eu-fg: #0d4a22;
+  --badge-jp-bg: #ffd8df;
+  --badge-jp-fg: #7a1528;
+  --badge-asia-bg: #ffe7c2;
+  --badge-asia-fg: #6b4300;
+  --badge-sys-bg: #e2e7ec;
+  --badge-sys-fg: #37474f;
 }
 
 /* Region badges — same recipe as Ps2Region.kt, both themes */
@@ -122,12 +149,14 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 76px;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
   -webkit-tap-highlight-color: transparent;
   overflow-wrap: break-word;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--on-surface);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
@@ -141,6 +170,7 @@ h1,
 h2,
 h3 {
   font-family: "Chakra Petch", system-ui, sans-serif;
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: 0.01em;
   margin: 0;
@@ -336,6 +366,48 @@ code,
 .btn-outline:hover {
   border-color: var(--primary);
   background: var(--surface-container);
+}
+
+/* High-contrast GitHub button */
+.btn-github {
+  background: #24292f;
+  color: #ffffff !important;
+  border: 1px solid #4a5265;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-github svg {
+  fill: #ffffff;
+}
+
+.btn-github:hover {
+  background: #1b2027;
+  border-color: var(--primary);
+  color: #ffffff !important;
+  filter: brightness(1.1);
+}
+
+[data-theme="light"] .btn-github {
+  background: #1f2328;
+  color: #ffffff !important;
+  border-color: #1f2328;
+}
+
+[data-theme="light"] .btn-github:hover {
+  background: #121519;
+  border-color: #121519;
+}
+
+[data-theme="dark"] .btn-github {
+  background: #1f242d;
+  color: #ffffff !important;
+  border-color: #5b6579;
+}
+
+[data-theme="dark"] .btn-github:hover {
+  background: #272e3a;
+  border-color: var(--primary);
 }
 
 .btn-sm {
@@ -576,18 +648,18 @@ code,
 .version-chip {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px 10px;
   max-width: 100%;
   background: var(--surface-container);
   border: 1px solid var(--outline-variant);
   border-radius: 999px;
-  padding: 7px 16px 7px 8px;
+  padding: 6px 14px 6px 10px;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.78rem;
   color: var(--on-surface-variant);
   margin: 0 0 22px;
   text-decoration: none;
+  white-space: nowrap;
   transition: border-color 0.18s ease;
 }
 
@@ -940,12 +1012,16 @@ a.version-chip:hover {
 }
 
 .region {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.06em;
+  line-height: 1;
   border-radius: 5px;
-  padding: 2px 7px;
+  padding: 3px 6px;
   white-space: nowrap;
 }
 
@@ -1114,179 +1190,220 @@ a.version-chip:hover {
 }
 
 .feature-card li {
-  display: flex;
-  gap: 10px;
+  position: relative;
+  padding-left: 18px;
   font-size: 0.92rem;
   color: var(--on-surface-variant);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .feature-card li::before {
   content: "";
-  flex: none;
-  width: 8px;
-  height: 8px;
-  margin-top: 7px;
+  position: absolute;
+  left: 0;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
   background: var(--secondary);
 }
 
 .feature-card li code {
+  display: inline-block;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.82em;
-  color: var(--on-surface);
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--primary);
   background: var(--surface-container);
-  border-radius: 5px;
-  padding: 0 6px;
-}
-
-/* ---------- Formats table ---------- */
-.table-card {
-  background: var(--surface);
   border: 1px solid var(--outline-variant);
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.table-scroll {
-  overflow-x: auto;
-}
-
-/* Stacked format cards on small screens — no sideways scrolling. */
-@media (max-width: 700px) {
-  table.formats {
-    min-width: 0;
-  }
-
-  .formats thead {
-    display: none;
-  }
-
-  .formats tbody,
-  .formats tbody tr,
-  .formats tbody td {
-    display: block;
-    width: 100%;
-  }
-
-  .formats tbody tr {
-    padding: 8px 0;
-    border-bottom: 1px solid var(--outline-variant);
-  }
-
-  .formats tbody tr:last-child {
-    border-bottom: none;
-  }
-
-  .formats tbody td {
-    border-bottom: none;
-    padding: 5px 20px;
-  }
-
-  .formats tbody td:first-child {
-    padding-top: 14px;
-    padding-bottom: 2px;
-  }
-
-  .formats tbody td:last-child {
-    padding-bottom: 16px;
-  }
-
-  .formats .format-name {
-    white-space: normal;
-    font-size: 1rem;
-  }
-
-  .formats tbody td:nth-child(n + 2)::before {
-    display: block;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: 0.66rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--on-surface-variant);
-    margin: 10px 0 5px;
-  }
-
-  .formats tbody td:nth-child(2)::before {
-    content: "Extension";
-  }
-
-  .formats tbody td:nth-child(3)::before {
-    content: "About";
-  }
-
-  .formats tbody td:nth-child(4)::before {
-    content: "Support";
-  }
-}
-
-table.formats {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.92rem;
-  min-width: 640px;
-}
-
-.formats thead th {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  text-align: left;
-  color: var(--on-surface-variant);
-  background: var(--surface-low);
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--outline-variant);
+  border-radius: 6px;
+  padding: 1px 7px;
+  line-height: 1.4;
+  margin: 1px 2px;
+  vertical-align: baseline;
   white-space: nowrap;
 }
 
-.formats tbody td {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--outline-variant);
-  vertical-align: top;
+/* ---------- Formats section ---------- */
+.formats-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 6px;
 }
 
-.formats tbody tr:last-child td {
-  border-bottom: none;
+.format-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--outline-variant);
+  background: var(--surface);
+  color: var(--on-surface-variant);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.18s ease, color 0.18s ease,
+    border-color 0.18s ease;
 }
 
-.formats tbody tr {
-  transition: background-color 0.15s ease;
+.format-filter-btn:hover {
+  border-color: var(--primary);
+  color: var(--on-surface);
 }
 
-.formats tbody tr:hover {
-  background: var(--surface-low);
+.format-filter-btn.active {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+  border-color: transparent;
+}
+
+.format-filter-btn .filter-count {
+  font-size: 0.72rem;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.format-filter-btn.active .filter-count {
+  background: var(--on-secondary-container);
+  color: var(--secondary-container);
+}
+
+.formats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .formats-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+.format-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.format-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+}
+
+.format-card[hidden] {
+  display: none !important;
+}
+
+.format-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .format-card-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .format-card .format-support {
+    justify-content: flex-start;
+  }
+}
+
+.format-card-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.format-name {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--on-surface);
+  margin: 0;
+  line-height: 1.25;
+}
+
+.format-ext-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.format-card .format-support {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.format-desc {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.format-desc code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  background: var(--surface-container);
+  color: var(--primary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--outline-variant);
 }
 
 .ext {
   display: inline-block;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 600;
   background: var(--primary-container);
   color: var(--on-primary-container);
-  border-radius: 7px;
-  padding: 4px 10px;
-  margin: 0 4px 4px 0;
+  border-radius: 6px;
+  padding: 2px 7px;
+  line-height: 1.35;
   white-space: nowrap;
-}
-
-.format-name {
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.format-desc {
-  color: var(--on-surface-variant);
 }
 
 .io-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.68rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
   border-radius: 6px;
-  padding: 3px 9px;
+  padding: 3px 7px;
+  margin: 0;
   white-space: nowrap;
 }
 
@@ -1301,34 +1418,52 @@ table.formats {
 }
 
 .ecc-note {
-  display: flex;
-  gap: 14px;
+  background: #3d2600;
+  color: #ffd97a;
+  border-radius: 20px;
+  padding: 24px 26px;
   margin-top: 18px;
-  background: var(--surface);
-  border: 1px solid var(--outline-variant);
-  border-left: 4px solid var(--tertiary);
-  border-radius: 16px;
-  padding: 18px 20px;
-  font-size: 0.92rem;
-  color: var(--on-surface-variant);
 }
 
-.ecc-note svg {
+[data-theme="light"] .ecc-note {
+  background: #fef3c7;
+  color: #78350f;
+}
+
+.ecc-note h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: inherit;
+}
+
+.ecc-note h3 svg {
   flex: none;
   width: 22px;
   height: 22px;
-  color: var(--tertiary);
-  margin-top: 2px;
 }
 
-.ecc-note > div {
-  min-width: 0;
+.ecc-note p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  opacity: 0.95;
 }
 
 .ecc-note code {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.85em;
-  color: var(--on-surface);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 5px;
+  padding: 1px 7px;
+  color: inherit;
+}
+
+[data-theme="light"] .ecc-note code {
+  background: rgba(120, 53, 15, 0.12);
 }
 
 /* ---------- Guide ---------- */
@@ -1445,7 +1580,7 @@ table.formats {
   border: 1px solid var(--outline-variant);
   border-radius: 16px;
   overflow: hidden;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.28s ease, background-color 0.28s ease;
 }
 
 .faq-list details[open] {
@@ -1487,7 +1622,7 @@ table.formats {
   margin-left: auto;
   flex: none;
   color: var(--on-surface-variant);
-  transition: transform 0.22s ease;
+  transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .faq-list summary .chev svg {
@@ -1504,6 +1639,7 @@ table.formats {
   padding: 0 20px 20px 64px;
   color: var(--on-surface-variant);
   font-size: 0.93rem;
+  will-change: height, opacity;
 }
 
 .faq-answer p:last-child {
@@ -1556,6 +1692,7 @@ table.formats {
 
 .dl-title h2 {
   font-size: clamp(1.5rem, 3vw, 2.1rem);
+  font-weight: 700;
   margin-bottom: 6px;
 }
 
@@ -1746,32 +1883,56 @@ footer {
   color: var(--on-surface-variant);
 }
 
-.theme-control {
+.theme-switch {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 0 20px;
+  background: var(--surface-container-high);
+  border: 1px solid var(--outline-variant);
   border-radius: 999px;
-  border: 1px solid var(--outline);
+  padding: 3px;
+  gap: 3px;
+}
+
+.theme-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.theme-switch-btn:hover {
+  color: var(--on-surface);
+}
+
+.theme-switch-btn.active {
   background: var(--surface);
   color: var(--on-surface);
-  font-family: "Chakra Petch", system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 0.88rem;
-  cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  border-color: var(--outline-variant);
+  box-shadow: var(--shadow-sm);
 }
 
-.theme-control:hover {
-  border-color: var(--primary);
-  background: var(--surface-container);
+.theme-switch-btn svg {
+  width: 15px;
+  height: 15px;
+  color: currentColor;
 }
 
-.theme-control svg {
-  width: 20px;
-  height: 20px;
+.theme-switch-btn.active#theme-btn-dark svg {
   color: var(--primary);
+}
+
+.theme-switch-btn.active#theme-btn-light svg {
+  color: #f59e0b;
 }
 
 .footer-bottom {
@@ -1785,29 +1946,6 @@ footer {
   color: var(--on-surface-variant);
 }
 
-.footer-bottom .flat-note {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.flat-swatch {
-  display: inline-flex;
-}
-
-.flat-swatch i {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  margin-left: -4px;
-  border: 1px solid rgba(0, 0, 0, 0.25);
-}
-
-.flat-swatch i:first-child {
-  margin-left: 0;
-}
-
 /* ---------- Reveal on scroll ---------- */
 .reveal {
   opacity: 0;
@@ -1818,19 +1956,6 @@ footer {
   opacity: 1;
   transform: none;
   transition: opacity 0.55s ease, transform 0.55s ease;
-}
-
-/* ---------- Scroll progress ---------- */
-.scroll-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 120;
-  width: 100%;
-  height: 3px;
-  background: var(--primary);
-  transform: scaleX(0);
-  transform-origin: left center;
 }
 
 /* ---------- Responsive ---------- */
@@ -1899,18 +2024,9 @@ footer {
 }
 
 @media (max-width: 640px) {
-  /* Guaranteed safe area on phones: body-level gutters (16px) plus
-     container gutters (8px) = 24px total on each side. The body rule
-     is the backstop — content can never touch the viewport edges
-     even if a container rule fails. */
-  body {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
   .wrap {
-    padding-left: 8px;
-    padding-right: 8px;
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
   .section {
@@ -1939,7 +2055,11 @@ footer {
     padding: 16px 0;
   }
 
-  .theme-control {
+  .theme-switch {
+    flex: 1;
+  }
+
+  .theme-switch-btn {
     flex: 1;
     justify-content: center;
   }

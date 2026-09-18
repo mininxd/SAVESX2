@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 
 // base './' keeps asset URLs relative so the build works on
 // GitHub Pages project sites (user.github.io/SAVESX2/) and custom domains.
 export default defineConfig({
+  plugins: [tailwindcss()],
   base: './',
   build: {
     outDir: 'dist',

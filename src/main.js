@@ -7,22 +7,19 @@ const RELEASE_API = 'https://api.github.com/repos/mininxd/SAVESX2/releases/lates
 
 /* ---------- Theme toggle (dark default, persisted) ---------- */
 const root = document.documentElement;
-const themeToggle = document.getElementById('theme-toggle');
-const iconMoon = document.getElementById('theme-icon-moon');
-const iconSun = document.getElementById('theme-icon-sun');
+const btnLight = document.getElementById('theme-btn-light');
+const btnDark = document.getElementById('theme-btn-dark');
 const metaTheme = document.querySelector('meta[name="theme-color"]');
 
 function applyTheme(theme) {
   root.setAttribute('data-theme', theme);
   const isDark = theme === 'dark';
-  iconMoon.hidden = !isDark;
-  iconSun.hidden = isDark;
-  themeToggle.setAttribute(
-    'aria-label',
-    isDark ? 'Switch to light theme' : 'Switch to dark theme',
-  );
-  const themeLabel = document.getElementById('theme-label');
-  if (themeLabel) themeLabel.textContent = isDark ? 'Dark' : 'Light';
+  if (btnLight && btnDark) {
+    btnLight.classList.toggle('active', !isDark);
+    btnLight.setAttribute('aria-pressed', String(!isDark));
+    btnDark.classList.toggle('active', isDark);
+    btnDark.setAttribute('aria-pressed', String(isDark));
+  }
   if (metaTheme) metaTheme.setAttribute('content', isDark ? '#0f141c' : '#f9f9fe');
   try {
     localStorage.setItem('savesx2-theme', theme);
@@ -42,9 +39,8 @@ function applyTheme(theme) {
   applyTheme(theme);
 })();
 
-themeToggle.addEventListener('click', () => {
-  applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-});
+if (btnLight) btnLight.addEventListener('click', () => applyTheme('light'));
+if (btnDark) btnDark.addEventListener('click', () => applyTheme('dark'));
 
 /* ---------- Mobile drawer ---------- */
 const drawer = document.getElementById('drawer');
@@ -137,15 +133,86 @@ capChips.forEach((chip) =>
 );
 setCapacity(8);
 
-/* ---------- FAQ accordion (one open at a time) ---------- */
+/* ---------- FAQ smooth accordion (one open at a time) ---------- */
 const faqItems = [...document.querySelectorAll('.faq-list details')];
-faqItems.forEach((item) =>
-  item.addEventListener('toggle', () => {
-    if (item.open) faqItems.forEach((other) => {
-      if (other !== item) other.open = false;
-    });
-  }),
-);
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function expandFaq(details, content) {
+  details.dataset.animating = 'true';
+  details.setAttribute('open', '');
+  const endHeight = content.scrollHeight;
+  content.style.overflow = 'hidden';
+
+  if (prefersReducedMotion) {
+    content.style.overflow = '';
+    delete details.dataset.animating;
+    return;
+  }
+
+  const anim = content.animate(
+    [
+      { height: '0px', opacity: 0, paddingTop: '0px', paddingBottom: '0px' },
+      { height: `${endHeight}px`, opacity: 1, paddingTop: '', paddingBottom: '' },
+    ],
+    { duration: 280, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+  );
+
+  anim.onfinish = () => {
+    content.style.overflow = '';
+    delete details.dataset.animating;
+  };
+}
+
+function shrinkFaq(details, content) {
+  details.dataset.animating = 'true';
+  const startHeight = content.scrollHeight;
+  content.style.overflow = 'hidden';
+
+  if (prefersReducedMotion) {
+    details.removeAttribute('open');
+    content.style.overflow = '';
+    delete details.dataset.animating;
+    return;
+  }
+
+  const anim = content.animate(
+    [
+      { height: `${startHeight}px`, opacity: 1, paddingTop: '', paddingBottom: '' },
+      { height: '0px', opacity: 0, paddingTop: '0px', paddingBottom: '0px' },
+    ],
+    { duration: 240, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+  );
+
+  anim.onfinish = () => {
+    details.removeAttribute('open');
+    content.style.overflow = '';
+    delete details.dataset.animating;
+  };
+}
+
+faqItems.forEach((details) => {
+  const summary = details.querySelector('summary');
+  const content = details.querySelector('.faq-answer');
+  if (!summary || !content) return;
+
+  summary.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (details.dataset.animating === 'true') return;
+
+    const isOpen = details.hasAttribute('open');
+    if (isOpen) {
+      shrinkFaq(details, content);
+    } else {
+      faqItems.forEach((other) => {
+        if (other !== details && other.hasAttribute('open') && other.dataset.animating !== 'true') {
+          const otherContent = other.querySelector('.faq-answer');
+          if (otherContent) shrinkFaq(other, otherContent);
+        }
+      });
+      expandFaq(details, content);
+    }
+  });
+});
 
 /* ---------- Live release info (graceful fallback) ---------- */
 const heroVersion = document.getElementById('hero-version');
@@ -181,28 +248,30 @@ async function refreshRelease() {
 
 refreshRelease();
 
-/* ---------- Scroll progress bar (rAF-throttled) ---------- */
-const progressBar = document.getElementById('scroll-progress');
-let progressQueued = false;
-
-function updateProgress() {
-  progressQueued = false;
-  const max = document.documentElement.scrollHeight - window.innerHeight;
-  const ratio = max > 0 ? Math.min(window.scrollY / max, 1) : 0;
-  progressBar.style.transform = `scaleX(${ratio})`;
-}
-
-window.addEventListener(
-  'scroll',
-  () => {
-    if (!progressQueued) {
-      progressQueued = true;
-      requestAnimationFrame(updateProgress);
-    }
-  },
-  { passive: true },
-);
-updateProgress();
-
 /* ---------- Footer year ---------- */
 document.getElementById('year').textContent = String(new Date().getFullYear());
+
+/* ---------- Format filtering ---------- */
+const formatFilterBtns = document.querySelectorAll('.format-filter-btn');
+const formatCards = document.querySelectorAll('.format-card');
+
+formatFilterBtns.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const filter = btn.dataset.filter;
+    formatFilterBtns.forEach((b) => {
+      const isActive = b === btn;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-selected', String(isActive));
+    });
+
+    formatCards.forEach((card) => {
+      const match = filter === 'all' || card.dataset.category === filter;
+      if (match) {
+        card.removeAttribute('hidden');
+      } else {
+        card.setAttribute('hidden', '');
+      }
+    });
+  });
+});
+
