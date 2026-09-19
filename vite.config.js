@@ -1,3 +1,4 @@
+import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -9,6 +10,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        covers: resolve(__dirname, 'covers/index.html'),
+      },
+    },
   },
   server: {
     host: '0.0.0.0',

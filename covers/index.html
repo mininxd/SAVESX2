@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAVESX2 — Social Media Cover Studio &amp; Collection</title>
+    <meta
+      name="description"
+      content="Generate and download high-resolution cover photos and banners for SAVESX2. Safe-zone preview for mobile profile covers, customizable release information, and 1080p/2K/4K PNG export."
+    />
+    <meta name="google-site-verification" content="qZcr-DtwubUUplR8vGM1adKPCpoG4Lx2j0E7fqjPu2U" />
+    <meta name="theme-color" content="#0f141c" />
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+    <link rel="icon" type="image/png" href="../icon.png" />
+    <link rel="apple-touch-icon" href="../icon.png" />
+    <meta property="og:title" content="SAVESX2 Covers — Social Media Cover Studio" />
+    <meta
+      property="og:description"
+      content="High-resolution cover generator & collection for SAVESX2 releases, mobile profile covers, banners and social previews. Free & open-source."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="../icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../src/style.css" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('savesx2-theme') || 'dark';
+          if (t === 'light' || t === 'dark') {
+            document.documentElement.setAttribute('data-theme', t);
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="covers-page">
+    <a class="skip-link" href="#studio">Skip to studio</a>
+
+    <!-- ============ TOP BAR ============ -->
+    <header class="topbar px-4 sm:px-6">
+      <div class="wrap topbar-inner">
+        <a class="brand" href="../" aria-label="SAVESX2 home">
+          <img src="../icon.png" alt="SAVESX2 logo" width="34" height="34" />
+          <span>
+            <span class="brand-name">SAVESX2</span>
+            <span class="brand-sub">COVER STUDIO // HD ENGINE</span>
+          </span>
+        </a>
+
+        <!-- QUICK SWITCHER IN TOPBAR FOR DESKTOP -->
+        <div class="topbar-center-selector">
+          <label for="template-quick-select" class="sr-only">Quick Select Template</label>
+          <div class="topbar-select-wrapper">
+            <select id="template-quick-select" class="topbar-quick-select" aria-label="Select cover template">
+              <!-- Populated dynamically via JS -->
+            </select>
+          </div>
+        </div>
+
+        <nav class="nav-desktop" aria-label="Primary">
+          <a href="#studio" class="active">Studio</a>
+          <a href="#collection">Gallery</a>
+          <a href="../">← Main Site</a>
+        </nav>
+
+        <div class="topbar-actions">
+          <button class="btn btn-outline btn-sm btn-export-quick" id="btn-top-copy" type="button" title="Copy to clipboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span class="btn-text-sm">Copy</span>
+          </button>
+
+          <button class="btn btn-filled btn-sm btn-export-quick" id="btn-top-export" type="button" title="Download High-Res PNG">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M12 15V3" />
+            </svg>
+            <span class="btn-text-sm">Download</span>
+          </button>
+
+          <!-- THEME TOGGLE BUTTON -->
+          <button class="icon-btn theme-toggle-btn" id="btn-theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+            <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+            </svg>
+            <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+            </svg>
+          </button>
+
+          <button class="icon-btn menu-btn" id="menu-open" type="button" aria-label="Open menu" aria-controls="drawer" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ MOBILE DRAWER ============ -->
+    <div class="scrim" id="scrim"></div>
+    <nav class="drawer" id="drawer" aria-label="Mobile" inert>
+      <div class="drawer-head">
+        <span>MENU // COVER STUDIO</span>
+        <button class="icon-btn" id="menu-close" type="button" aria-label="Close menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+      <a class="drawer-link" href="#studio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        Studio Editor
+      </a>
+      <a class="drawer-link" href="#collection">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Collection Gallery
+      </a>
+      <a class="drawer-link" href="../">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        ← Back to SAVESX2 Home
+      </a>
+      <a class="btn btn-github" href="https://github.com/mininxd/SAVESX2" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.75 2.69 1.25 3.35.95.1-.74.4-1.25.72-1.53-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.7 5.38-5.27 5.66.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.21.68.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z" /></svg>
+        View on GitHub
+      </a>
+    </nav>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main id="main">
+      <!-- COMPACT APP HEADER STRIP -->
+      <section class="studio-app-header px-4 sm:px-6">
+        <div class="wrap">
+          <div class="studio-header-strip">
+            <div class="studio-header-left">
+              <span class="studio-app-badge"><span class="badge-dot-live"></span> COVER STUDIO</span>
+              <h1 class="studio-headline">Social Media Cover Designer</h1>
+            </div>
+            <div class="studio-header-right">
+              <span class="app-chip">1080P MINIMUM</span>
+              <span class="app-chip">AVATAR-SAFE COVERS</span>
+              <span class="app-chip">14 TEMPLATES</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ INTERACTIVE STUDIO WORKSPACE ============ -->
+      <section id="studio" class="studio-workspace px-4 sm:px-6">
+        <div class="wrap">
+          <div class="editor-layout">
+            
+            <!-- LEFT PANE: LIVE CANVAS WORKBENCH -->
+            <div class="workbench-pane">
+              <div class="workbench-card">
+                
+                <!-- STAGE TOP BAR -->
+                <div class="workbench-bar-top">
+                  <div class="stage-info-meta">
+                    <span class="stage-name-heading" id="stage-template-name">Cobalt SafeZone (Exact Match)</span>
+                    <span class="stage-dim-pill" id="stage-dims-display">1500 × 1240 px (Facebook Mobile Cover)</span>
+                  </div>
+
+                  <!-- ZOOM / SCALE CONTROLS -->
+                  <div class="stage-zoom-bar">
+                    <button type="button" class="btn-zoom active" data-zoom="fit" title="Fit to Container">Fit</button>
+                    <button type="button" class="btn-zoom" data-zoom="100" title="100% Size">100%</button>
+                    <button type="button" class="btn-zoom" data-zoom="75" title="75% Size">75%</button>
+                    <button type="button" class="btn-zoom" data-zoom="50" title="50% Size">50%</button>
+                  </div>
+                </div>
+
+                <!-- PREVIEW CANVAS WORKSPACE -->
+                <div class="stage-viewport" id="stage-viewport">
+                  <div class="stage-canvas-frame zoom-fit" id="stage-canvas-frame">
+                    <!-- The dynamic cover canvas is rendered here -->
+                    <div class="cover-canvas" id="cover-canvas"></div>
+                  </div>
+                </div>
+
+                <!-- STAGE ACTION FOOTER -->
+                <div class="workbench-bar-bottom">
+                  <button class="btn btn-filled btn-export-main" id="btn-export-png" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <path d="M7 10l5 5 5-5" />
+                      <path d="M12 15V3" />
+                    </svg>
+                    <span>Download</span>
+                  </button>
+
+                  <button class="btn btn-outline btn-copy-action" id="btn-copy-clipboard" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    <span>Copy</span>
+                  </button>
+                </div>
+
+                <!-- STATUS NOTIFICATION / TOAST -->
+                <div class="studio-status-toast" id="studio-status-toast" role="status" aria-live="polite"></div>
+              </div>
+            </div>
+
+            <!-- RIGHT PANE: TABBED STUDIO INSPECTOR -->
+            <div class="inspector-pane">
+              <div class="inspector-card">
+
+                <!-- INSPECTOR TABS BAR (NO EMOJI) -->
+                <div class="inspector-tabs" role="tablist" aria-label="Editor Controls">
+                  <button type="button" class="inspector-tab active" data-tab="templates" role="tab" aria-selected="true">
+                    <span>Templates</span>
+                    <span class="tab-counter">14</span>
+                  </button>
+                  <button type="button" class="inspector-tab" data-tab="content" role="tab" aria-selected="false">
+                    <span>Content</span>
+                  </button>
+                  <button type="button" class="inspector-tab" data-tab="canvas" role="tab" aria-selected="false">
+                    <span>Size &amp; Scale</span>
+                  </button>
+                  <button type="button" class="inspector-tab" data-tab="style" role="tab" aria-selected="false">
+                    <span>Theme</span>
+                  </button>
+                </div>
+
+                <!-- TAB PANELS WRAPPER -->
+                <div class="inspector-body">
+                  
+                  <!-- TAB PANEL 1: TEMPLATES (NO ARROWS) -->
+                  <div class="inspector-panel active" id="panel-templates" role="tabpanel">
+                    <div class="panel-section-header">
+                      <div class="panel-title-group">
+                        <h3 class="panel-title">Choose Webdesign Template</h3>
+                        <p class="panel-sub">Select from 14 high-impact cover layouts</p>
+                      </div>
+                    </div>
+
+                    <!-- CATEGORY SUBFILTERS -->
+                    <div class="tpl-subfilters" id="tpl-subfilters">
+                      <button type="button" class="tpl-subchip active" data-cat="all">All (14)</button>
+                      <button type="button" class="tpl-subchip" data-cat="profile">Profile Safe</button>
+                      <button type="button" class="tpl-subchip" data-cat="banner">Banners</button>
+                      <button type="button" class="tpl-subchip" data-cat="retro">Retro PS2</button>
+                      <button type="button" class="tpl-subchip" data-cat="dev">Dev &amp; Hex</button>
+                    </div>
+
+                    <!-- TEMPLATE CARDS REEL / GRID -->
+                    <div class="template-selector-grid" id="template-selector-list" role="tablist">
+                      <!-- Populated dynamically via JS -->
+                    </div>
+                  </div>
+
+                  <!-- TAB PANEL 2: CONTENT & METADATA -->
+                  <div class="inspector-panel" id="panel-content" role="tabpanel">
+                    <div class="panel-section-header">
+                      <div class="panel-title-group">
+                        <h3 class="panel-title">Text &amp; Release Content</h3>
+                        <p class="panel-sub">Customize version, badges, dates, and links</p>
+                      </div>
+                      <button type="button" class="btn-text-action" id="btn-sync-github" title="Fetch latest release from GitHub API">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                        Sync GitHub
+                      </button>
+                    </div>
+
+                    <div class="form-grid">
+                      <!-- BADGE FIELD -->
+                      <div class="form-field">
+                        <label for="input-badge" class="input-label">Channel / Top Badge</label>
+                        <input type="text" id="input-badge" class="form-input" value="LATEST STABLE" />
+                        <div class="suggestion-chips" id="badge-suggestions">
+                          <button type="button" class="chip-mini" data-val="LATEST STABLE">LATEST STABLE</button>
+                          <button type="button" class="chip-mini" id="badge-chip-version" data-val="v1.7.2 RELEASE">v1.7.2 RELEASE</button>
+                          <button type="button" class="chip-mini" data-val="NIGHTLY BUILD">NIGHTLY</button>
+                          <button type="button" class="chip-mini" data-val="ANDROID EDITION">ANDROID</button>
+                        </div>
+                      </div>
+
+                      <!-- TITLE & VERSION -->
+                      <div class="form-field">
+                        <label class="input-label">Title &amp; Version</label>
+                        <div class="input-pair">
+                          <input type="text" id="input-title" class="form-input" value="SAVESX2" placeholder="App Title" />
+                          <input type="text" id="input-version" class="form-input w-28" value="v1.7.2" placeholder="Version" />
+                        </div>
+                      </div>
+
+                      <!-- PLATFORM & MINSDK -->
+                      <div class="form-field">
+                        <label class="input-label">Platform Tagline &amp; MinSDK</label>
+                        <div class="input-pair">
+                          <input type="text" id="input-platform" class="form-input" value="ANDROID APK • MINSDK" placeholder="Platform Info" />
+                          <input type="text" id="input-minsdk" class="form-input w-24" value="26+" placeholder="SDK" />
+                        </div>
+                      </div>
+
+                      <!-- RELEASE DATE -->
+                      <div class="form-field">
+                        <div class="label-split">
+                          <label for="input-date" class="input-label">Release Date</label>
+                          <button type="button" class="btn-micro" id="btn-set-today">Set Today</button>
+                        </div>
+                        <input type="text" id="input-date" class="form-input" value="RELEASED 18 SEPT 2026" />
+                      </div>
+
+                      <!-- REPOSITORY / FOOTER -->
+                      <div class="form-field">
+                        <label for="input-repo" class="input-label">Repository / Bottom Text</label>
+                        <input type="text" id="input-repo" class="form-input" value="git:mininxd/SAVESX2" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- TAB PANEL 3: CANVAS SIZE & SCALE (NO EMOJI) -->
+                  <div class="inspector-panel" id="panel-canvas" role="tabpanel">
+                    <div class="panel-section-header">
+                      <div class="panel-title-group">
+                        <h3 class="panel-title">Target Platform &amp; Aspect Ratio</h3>
+                        <p class="panel-sub">Pre-calculated social media dimensions</p>
+                      </div>
+                    </div>
+
+                    <!-- PLATFORM TILES -->
+                    <div class="platform-grid" id="platform-chips">
+                      <button type="button" class="platform-tile active" data-platform="fb-mobile" data-w="1500" data-h="1240" data-safe="true">
+                        <div class="platform-meta">
+                          <span class="platform-name">FB Mobile Cover</span>
+                          <span class="platform-res">1500 × 1240 px (SafeZone)</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="platform-tile" data-platform="fb-page" data-w="1640" data-h="624" data-safe="false">
+                        <div class="platform-meta">
+                          <span class="platform-name">FB Page / Desktop</span>
+                          <span class="platform-res">1640 × 624 px</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="platform-tile" data-platform="twitter" data-w="1500" data-h="500" data-safe="false">
+                        <div class="platform-meta">
+                          <span class="platform-name">Twitter / X Header</span>
+                          <span class="platform-res">1500 × 500 px</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="platform-tile" data-platform="youtube" data-w="2560" data-h="1440" data-safe="false">
+                        <div class="platform-meta">
+                          <span class="platform-name">YouTube Banner</span>
+                          <span class="platform-res">2560 × 1440 px</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="platform-tile" data-platform="github" data-w="1280" data-h="640" data-safe="false">
+                        <div class="platform-meta">
+                          <span class="platform-name">GitHub Social Preview</span>
+                          <span class="platform-res">1280 × 640 px</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="platform-tile" data-platform="fhd" data-w="1920" data-h="1080" data-safe="false">
+                        <div class="platform-meta">
+                          <span class="platform-name">1080p Widescreen</span>
+                          <span class="platform-res">1920 × 1080 px</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="platform-tile" data-platform="fhd-vert" data-w="1080" data-h="1920" data-safe="true">
+                        <div class="platform-meta">
+                          <span class="platform-name">Story / Mobile Post</span>
+                          <span class="platform-res">1080 × 1920 px (9:16)</span>
+                        </div>
+                      </button>
+
+                      <button type="button" class="platform-tile" data-platform="square" data-w="1080" data-h="1080" data-safe="false">
+                        <div class="platform-meta">
+                          <span class="platform-name">Square 1:1 Post</span>
+                          <span class="platform-res">1080 × 1080 px</span>
+                        </div>
+                      </button>
+                    </div>
+
+                    <!-- EXPORT SCALE MULTIPLIER -->
+                    <div class="scale-section">
+                      <label class="input-label">Export Multiplier (1080p+ Minimum Guaranteed)</label>
+                      <div class="quality-chips" id="quality-chips">
+                        <button type="button" class="quality-chip active" data-scale="1">
+                          <strong>1x (1080p Min)</strong>
+                          <span>Native Sharp</span>
+                        </button>
+                        <button type="button" class="quality-chip" data-scale="2">
+                          <strong>2x (2K QHD)</strong>
+                          <span>Crisp (Recommended)</span>
+                        </button>
+                        <button type="button" class="quality-chip" data-scale="3">
+                          <strong>3x (4K Ultra-HD)</strong>
+                          <span>Master Quality</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- TAB PANEL 4: THEME & COLOR -->
+                  <div class="inspector-panel" id="panel-style" role="tabpanel">
+                    <div class="panel-section-header">
+                      <div class="panel-title-group">
+                        <h3 class="panel-title">Accent Color &amp; Palette</h3>
+                        <p class="panel-sub">Choose primary highlight hue or pick custom hex</p>
+                      </div>
+                      <button type="button" class="btn-micro" id="btn-reset-color">Reset Default</button>
+                    </div>
+
+                    <!-- PRESET PALETTE SWATCHES -->
+                    <div class="swatches-wrapper">
+                      <label class="input-label">Preset Color Accents</label>
+                      <div class="color-palette-row" id="color-palette-row">
+                        <button type="button" class="color-swatch active" data-color="#00439c" title="Cobalt Classic (SAVESX2 Default)" style="background: #00439c"></button>
+                        <button type="button" class="color-swatch" data-color="#00b4d8" title="Cyber Cyan" style="background: #00b4d8"></button>
+                        <button type="button" class="color-swatch" data-color="#06d6a0" title="Emerald Green" style="background: #06d6a0"></button>
+                        <button type="button" class="color-swatch" data-color="#ffb703" title="Solar Amber" style="background: #ffb703"></button>
+                        <button type="button" class="color-swatch" data-color="#e63946" title="Crimson Red" style="background: #e63946"></button>
+                        <button type="button" class="color-swatch" data-color="#ff007f" title="Synthwave Magenta" style="background: #ff007f"></button>
+                        <button type="button" class="color-swatch" data-color="#00ff66" title="Terminal Phosphor" style="background: #00ff66"></button>
+                        <button type="button" class="color-swatch" data-color="#141a24" title="Dark Obsidian" style="background: #141a24"></button>
+                      </div>
+                    </div>
+
+                    <!-- CUSTOM COLOR PICKER -->
+                    <div class="custom-color-box">
+                      <label for="input-custom-color" class="input-label">Custom HEX Color</label>
+                      <div class="custom-color-row">
+                        <div class="color-picker-trigger">
+                          <input type="color" id="input-custom-color" value="#00439c" title="Pick Color" />
+                          <span class="color-picker-preview" id="custom-color-preview" style="background: #00439c"></span>
+                        </div>
+                        <input type="text" id="input-custom-hex" class="form-input custom-hex-input" value="#00439c" maxlength="7" />
+                      </div>
+                    </div>
+
+                    <!-- ACTIVE THEME COLOR STATUS -->
+                    <div class="active-color-badge-box" style="margin-top: 14px; padding: 10px 12px; background: var(--surface-highest); border: 1px solid var(--outline-variant); border-radius: 8px;">
+                      <span class="input-label" style="margin-bottom: 2px; font-size: 0.72rem;">Active Studio Color Theme</span>
+                      <div>
+                        <span id="active-color-name" style="font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; color: var(--on-surface);">Cobalt Classic (#00439c)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ COLLECTION GALLERY SECTION ============ -->
+      <section id="collection" class="collection-section px-4 sm:px-6">
+        <div class="wrap">
+          <div class="section-head text-center">
+            <span class="eyebrow">GALLERY // WEB-DESIGNED COVERS</span>
+            <h2 class="section-title">Collection of Cover Webdesigns</h2>
+            <p class="section-sub">
+              Browse all 14 social media cover layouts. Each design is optimized for high-impact visual appeal,
+              retina sharpness and clean safe-zones for profile avatars.
+            </p>
+          </div>
+
+          <!-- FILTER BAR -->
+          <div class="gallery-filters" role="tablist" aria-label="Filter covers">
+            <button type="button" class="filter-chip active" data-filter="all">All Covers (14)</button>
+            <button type="button" class="filter-chip" data-filter="profile">Mobile Profile Safe</button>
+            <button type="button" class="filter-chip" data-filter="banner">Banners &amp; Headers</button>
+            <button type="button" class="filter-chip" data-filter="retro">Retro PS2 Heritage</button>
+            <button type="button" class="filter-chip" data-filter="dev">Developer &amp; GitHub</button>
+          </div>
+
+          <!-- GALLERY CARDS GRID -->
+          <div class="gallery-grid" id="gallery-cards-grid">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ============ FOOTER ============ -->
+    <footer class="footer px-4 sm:px-6">
+      <div class="wrap">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <a class="brand" href="../">
+              <img src="../icon.png" alt="SAVESX2 logo" width="32" height="32" />
+              <span>
+                <span class="brand-name">SAVESX2</span>
+                <span class="brand-sub">COVER STUDIO // HIGH RESOLUTION</span>
+              </span>
+            </a>
+            <p style="margin-top: 16px">
+              Free, open-source cover photo generator and gallery for SAVESX2 and retro gaming communities.
+            </p>
+          </div>
+          <div class="footer-col">
+            <h3>Navigation</h3>
+            <ul>
+              <li><a href="../">SAVESX2 Home</a></li>
+              <li><a href="#studio">Cover Studio</a></li>
+              <li><a href="#collection">Collection Gallery</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h3>Project</h3>
+            <ul>
+              <li><a href="https://github.com/mininxd/SAVESX2" target="_blank" rel="noopener">GitHub repository</a></li>
+              <li><a href="https://github.com/mininxd/SAVESX2/releases" target="_blank" rel="noopener">Releases</a></li>
+              <li><a href="https://github.com/mininxd/SAVESX2/issues" target="_blank" rel="noopener">Issues &amp; feature requests</a></li>
+              <li><a href="https://github.com/mininxd/SAVESX2/blob/master/COPYING.GPLv3" target="_blank" rel="noopener">License (GPL-3.0)</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer-theme">
+          <span class="footer-theme-label">Appearance</span>
+          <div class="theme-switch" role="group" aria-label="Appearance theme">
+            <button
+              type="button"
+              class="theme-switch-btn"
+              id="theme-btn-light"
+              aria-pressed="false"
+              data-theme-set="light"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+              <span>Light</span>
+            </button>
+            <button
+              type="button"
+              class="theme-switch-btn active"
+              id="theme-btn-dark"
+              aria-pressed="true"
+              data-theme-set="dark"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+              </svg>
+              <span>Dark</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <span>© <span id="year">2026</span> SAVESX2 contributors</span>
+          <span>GPL-3.0-or-later • High Quality 1080p+ PNG Engine</span>
+        </div>
+      </div>
+    </footer>
+
+    <script type="module" src="../src/covers.js"></script>
+  </body>
+</html>
