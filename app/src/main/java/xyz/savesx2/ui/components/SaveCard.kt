@@ -1,8 +1,10 @@
 package xyz.savesx2.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -45,10 +49,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import xyz.savesx2.core.Ps2Save
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SaveCard(
     save: Ps2Save,
+    isSelected: Boolean = false,
+    isMultiSelectMode: Boolean = false,
     onClick: (Ps2Save) -> Unit,
+    onLongClick: ((Ps2Save) -> Unit)? = null,
+    onToggleSelect: ((Ps2Save) -> Unit)? = null,
     onExportPsu: (Ps2Save) -> Unit,
     onExportZip: (Ps2Save) -> Unit,
     onDelete: (Ps2Save) -> Unit,
@@ -78,11 +87,36 @@ fun SaveCard(
     val imageBitmap = localImageBitmap ?: save.iconImageBitmap
 
     Surface(
-        onClick = handleCardClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(
+                onClick = {
+                    if (isMultiSelectMode) {
+                        onToggleSelect?.invoke(save)
+                    } else {
+                        handleCardClick()
+                    }
+                },
+                onLongClick = {
+                    if (onLongClick != null) {
+                        onLongClick(save)
+                    } else if (isMultiSelectMode) {
+                        onToggleSelect?.invoke(save)
+                    }
+                }
+            ),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        border = if (isSelected) {
+            BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+        }
     ) {
         Row(
             modifier = Modifier
@@ -204,18 +238,29 @@ fun SaveCard(
                 }
             }
 
-            // More actions button
-            Box {
-                IconButton(
-                    onClick = { menuExpanded = true },
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Save Actions",
-                        modifier = Modifier.size(18.dp)
+            // Selection checkbox or more actions button
+            if (isMultiSelectMode) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelect?.invoke(save) },
+                    modifier = Modifier.size(32.dp),
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = MaterialTheme.colorScheme.primary
                     )
-                }
+                )
+            } else {
+                // More actions button
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Save Actions",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
 
                 if (menuExpanded) {
                     DropdownMenu(

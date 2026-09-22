@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +55,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
+import xyz.savesx2.core.BatchExportFormat
 import xyz.savesx2.core.ExportFilenameFormat
 import xyz.savesx2.core.MemcardFormatter
 import xyz.savesx2.core.Ps2Save
@@ -62,12 +64,14 @@ import xyz.savesx2.core.RecentCard
 import xyz.savesx2.core.StoragePermissionHelper
 import java.io.File
 import xyz.savesx2.ui.components.AppHeader
+import xyz.savesx2.ui.components.BatchExportDialog
 import xyz.savesx2.ui.components.CardStatsDialog
 import xyz.savesx2.ui.components.CreateCardDialog
 import xyz.savesx2.ui.components.EditTimestampsDialog
 import xyz.savesx2.ui.components.FormatCardDialog
 import xyz.savesx2.ui.components.HexViewerDialog
 import xyz.savesx2.ui.components.Icon3dViewerDialog
+import xyz.savesx2.ui.components.MultiSelectHeader
 import xyz.savesx2.ui.components.ResizeCardDialog
 import xyz.savesx2.ui.components.SaveDetailModal
 import xyz.savesx2.ui.components.SettingsDialog
@@ -92,6 +96,8 @@ class MainActivity : ComponentActivity() {
     private var pendingExportCbsBytes: ByteArray? = null
     private var pendingExportXpsBytes: ByteArray? = null
     private var pendingExportZipBytes: ByteArray? = null
+    private var pendingBatchExportFormat: BatchExportFormat? = null
+    private var pendingBatchExportSaves: List<Ps2Save>? = null
     private var pendingCreateCard: PendingCreateCard? = null
     private var pendingActionAfterSave: (() -> Unit)? = null
     private var isWaitingForActivityResult = false
@@ -379,6 +385,26 @@ class MainActivity : ComponentActivity() {
         pendingExportZipBytes = null
     }
 
+    private val batchExportDirectoryLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        isWaitingForActivityResult = false
+        val format = pendingBatchExportFormat
+        val saves = pendingBatchExportSaves
+        pendingBatchExportFormat = null
+        pendingBatchExportSaves = null
+        if (uri == null || format == null || saves.isNullOrEmpty()) {
+            return@registerForActivityResult
+        }
+
+        try {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        } catch (_: Exception) {}
+
+        executeBatchExport(uri, format, saves)
+    }
+
     private val manageStorageLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         isWaitingForActivityResult = false
         val granted = StoragePermissionHelper.hasStoragePermission(this)
@@ -471,9 +497,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val appVersion = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.2"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.3"
         } catch (_: Exception) {
-            "1.7.2"
+            "1.7.3"
         }
         viewModel.checkUpdate(appVersion)
 
@@ -484,6 +510,7 @@ class MainActivity : ComponentActivity() {
                 val filterType by viewModel.filterType.collectAsState()
                 val sortBy by viewModel.sortBy.collectAsState()
                 val selectedSave by viewModel.selectedSave.collectAsState()
+                val selectedSaveNames by viewModel.selectedSaveNames.collectAsState()
                 val showCreateDialog by viewModel.showCreateDialog.collectAsState()
                 val showFormatDialog by viewModel.showFormatDialog.collectAsState()
                 val showStatsDialog by viewModel.showStatsDialog.collectAsState()
@@ -502,6 +529,9 @@ class MainActivity : ComponentActivity() {
                 val canRedo by viewModel.canRedo.collectAsState()
                 val hasLegacyApp by viewModel.hasLegacyApp.collectAsState()
 
+                var showBatchExportDialog by remember { mutableStateOf(false) }
+                var showBatchDeleteConfirmDialog by remember { mutableStateOf(false) }
+
                 LaunchedEffect(snackbarMessage) {
                     snackbarMessage?.let { msg ->
                         snackbarHostState.currentSnackbarData?.dismiss()
@@ -515,6 +545,10 @@ class MainActivity : ComponentActivity() {
                 var showUnsavedChangesDialog by remember { mutableStateOf(false) }
                 var showReloadConfirmDialog by remember { mutableStateOf(false) }
                 var editingTimestampsSave by remember { mutableStateOf<Ps2Save?>(null) }
+
+                BackHandler(enabled = selectedSaveNames.isNotEmpty()) {
+                    viewModel.clearSelection()
+                }
 
                 BackHandler(enabled = (uiState is CardUiState.Loaded) && selectedSave == null) {
                     if (canUndo || canRedo) {
@@ -612,36 +646,61 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                Scaffold(
                     topBar = {
-                        AppHeader(
-                            cardName = currentCardName,
-                            hasUnsavedChanges = hasUnsavedChanges,
-                            isInMemoryOnly = isInMemoryOnly,
-                            canUndo = canUndo,
-                            canRedo = canRedo,
-                            onUndo = { viewModel.undo() },
-                            onRedo = { viewModel.redo() },
-                            onOpenCard = { launchOpenCard() },
-                            onCreateCard = { viewModel.setShowCreateDialog(true) },
-                            onSaveCard = { triggerSaveCurrentCard() },
-                            onSaveCardAs = { triggerSaveCardAs() },
-                            onFormatCard = { viewModel.setShowFormatDialog(true) },
-                            onShowStats = { viewModel.setShowStatsDialog(true) },
-                            onResizeCard = { viewModel.setShowResizeDialog(true) },
-                            isFolderCard = (uiState as? CardUiState.Loaded)?.isFolderCard ?: false,
-                            onOpenRawHex = {
-                                (uiState as? CardUiState.Loaded)?.let { loaded ->
-                                    viewModel.openHexEditor(
-                                        title = "${loaded.cardName} (Raw Card)",
-                                        data = loaded.memcard.getRawDataDirect(),
-                                        isRawCard = true
-                                    )
+                        if (selectedSaveNames.isNotEmpty()) {
+                            val loaded = uiState as? CardUiState.Loaded
+                            val allSaves = loaded?.saves ?: emptyList()
+                            val allVisibleSelected = allSaves.isNotEmpty() && allSaves.all { it.directoryName in selectedSaveNames }
+                            MultiSelectHeader(
+                                selectedCount = selectedSaveNames.size,
+                                isAllSelected = allVisibleSelected,
+                                onToggleSelectAll = {
+                                    if (allVisibleSelected) {
+                                        viewModel.clearSelection()
+                                    } else {
+                                        viewModel.selectAllSaves(allSaves.map { it.directoryName })
+                                    }
+                                },
+                                onExport = {
+                                    showBatchExportDialog = true
+                                },
+                                onDelete = {
+                                    showBatchDeleteConfirmDialog = true
+                                },
+                                onClose = {
+                                    viewModel.clearSelection()
                                 }
-                            },
-                            onCancelEdit = { viewModel.cancelEdit() },
-                            onOpenSettings = { viewModel.setShowSettingsDialog(true) }
-                        )
+                            )
+                        } else {
+                            AppHeader(
+                                cardName = currentCardName,
+                                hasUnsavedChanges = hasUnsavedChanges,
+                                isInMemoryOnly = isInMemoryOnly,
+                                canUndo = canUndo,
+                                canRedo = canRedo,
+                                onUndo = { viewModel.undo() },
+                                onRedo = { viewModel.redo() },
+                                onOpenCard = { launchOpenCard() },
+                                onCreateCard = { viewModel.setShowCreateDialog(true) },
+                                onSaveCard = { triggerSaveCurrentCard() },
+                                onSaveCardAs = { triggerSaveCardAs() },
+                                onFormatCard = { viewModel.setShowFormatDialog(true) },
+                                onShowStats = { viewModel.setShowStatsDialog(true) },
+                                onResizeCard = { viewModel.setShowResizeDialog(true) },
+                                isFolderCard = (uiState as? CardUiState.Loaded)?.isFolderCard ?: false,
+                                onOpenRawHex = {
+                                    (uiState as? CardUiState.Loaded)?.let { loaded ->
+                                        viewModel.openHexEditor(
+                                            title = "${loaded.cardName} (Raw Card)",
+                                            data = loaded.memcard.getRawDataDirect(),
+                                            isRawCard = true
+                                        )
+                                    }
+                                },
+                                onCancelEdit = { viewModel.cancelEdit() },
+                                onOpenSettings = { viewModel.setShowSettingsDialog(true) }
+                            )
+                        }
                     },
                     snackbarHost = {
                         SnackbarHost(snackbarHostState) { data ->
@@ -683,9 +742,9 @@ class MainActivity : ComponentActivity() {
                                     updateStatus = updateStatus,
                                     onCheckUpdate = {
                                          val version = try {
-                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.2"
+                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.3"
                                          } catch (e: Exception) {
-                                             "1.7.2"
+                                             "1.7.3"
                                          }
                                         viewModel.checkUpdate(version)
                                     }
@@ -740,6 +799,10 @@ class MainActivity : ComponentActivity() {
                                     onFilterChange = onFilterChange,
                                     sortBy = sortBy,
                                     onSortChange = onSortChange,
+                                    selectedSaveNames = selectedSaveNames,
+                                    onToggleSelectSave = { save -> viewModel.toggleSaveSelection(save.directoryName) },
+                                    onStartMultiSelect = { save -> viewModel.selectSaveForMultiSelect(save.directoryName) },
+                                    onExportSelected = { showBatchExportDialog = true },
                                     onSaveClick = onSaveClick,
                                     onExportPsu = onExportPsu,
                                     onExportZip = onExportZip,
@@ -941,9 +1004,57 @@ class MainActivity : ComponentActivity() {
                         onClearRecentCards = { viewModel.clearRecentCards(this@MainActivity) },
                         onDismiss = { viewModel.setShowSettingsDialog(false) },
                         versionName = try {
-                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.2"
+                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.3"
                         } catch (_: Exception) {
-                            "1.7.2"
+                            "1.7.3"
+                        }
+                    )
+                }
+
+                if (showBatchExportDialog) {
+                    val loadedSaves = (uiState as? CardUiState.Loaded)?.saves ?: emptyList()
+                    val selectedSavesList = loadedSaves.filter { it.directoryName in selectedSaveNames }
+                    BatchExportDialog(
+                        saveCount = selectedSavesList.size,
+                        onDismiss = { showBatchExportDialog = false },
+                        onSelectFormat = { format ->
+                            showBatchExportDialog = false
+                            launchBatchExport(format, selectedSavesList)
+                        }
+                    )
+                }
+
+                if (showBatchDeleteConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showBatchDeleteConfirmDialog = false },
+                        shape = RoundedCornerShape(20.dp),
+                        title = {
+                            Text(
+                                text = "Delete ${selectedSaveNames.size} Saves?",
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "Are you sure you want to delete the selected ${selectedSaveNames.size} save(s) from this memory card?",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showBatchDeleteConfirmDialog = false
+                                    viewModel.deleteSaves(selectedSaveNames)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Delete")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showBatchDeleteConfirmDialog = false }) {
+                                Text("Cancel")
+                            }
                         }
                     )
                 }
@@ -1192,6 +1303,67 @@ class MainActivity : ComponentActivity() {
             exportZipLauncher.launch(filename)
         } else {
             showToast("Failed to export ZIP")
+        }
+    }
+
+    private fun launchBatchExport(format: BatchExportFormat, saves: List<Ps2Save>) {
+        if (saves.isEmpty()) return
+        pendingBatchExportFormat = format
+        pendingBatchExportSaves = saves
+        isWaitingForActivityResult = true
+        batchExportDirectoryLauncher.launch(null)
+    }
+
+    private fun executeBatchExport(dirUri: Uri, format: BatchExportFormat, selectedSaves: List<Ps2Save>) {
+        lifecycleScope.launch {
+            viewModel.setLoading("Exporting ${selectedSaves.size} saves as ${format.title}...")
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val targetDir = DocumentFile.fromTreeUri(this@MainActivity, dirUri)
+                    if (targetDir == null || !targetDir.isDirectory) {
+                        return@withContext Triple(0, selectedSaves.size, "Could not access selected directory")
+                    }
+                    var successCount = 0
+                    var failCount = 0
+                    val dirName = targetDir.name ?: "selected folder"
+
+                    for (save in selectedSaves) {
+                        val bytes = viewModel.exportSave(save.directoryName, format)
+                        if (bytes == null) {
+                            failCount++
+                            continue
+                        }
+                        val filename = ExportFilenameFormat.generateFilename(
+                            save,
+                            format.extension,
+                            viewModel.exportFilenameFormat.value
+                        )
+                        val targetFile = targetDir.findFile(filename) ?: targetDir.createFile("application/octet-stream", filename)
+                        if (targetFile != null) {
+                            try {
+                                writeBytesToSafUriAtomically(targetFile.uri, bytes)
+                                successCount++
+                            } catch (_: Exception) {
+                                failCount++
+                            }
+                        } else {
+                            failCount++
+                        }
+                    }
+                    Triple(successCount, failCount, dirName)
+                } catch (e: Exception) {
+                    Triple(0, selectedSaves.size, e.message ?: "Unknown error")
+                }
+            }
+            viewModel.clearLoading()
+            viewModel.clearSelection()
+            if (result.second == 0) {
+                showToast("Exported ${result.first} saves as ${format.title} to ${result.third}!", isLong = true)
+            } else if (result.first > 0) {
+                showToast("Exported ${result.first} saves (${result.second} failed) to ${result.third}", isLong = true)
+            } else {
+                showToast("Batch export failed: ${result.third}", isLong = true)
+            }
         }
     }
 

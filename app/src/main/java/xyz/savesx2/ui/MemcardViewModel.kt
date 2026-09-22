@@ -183,6 +183,9 @@ class MemcardViewModel : ViewModel() {
     private val _selectedSave = MutableStateFlow<Ps2Save?>(null)
     val selectedSave: StateFlow<Ps2Save?> = _selectedSave.asStateFlow()
 
+    private val _selectedSaveNames = MutableStateFlow<Set<String>>(emptySet())
+    val selectedSaveNames: StateFlow<Set<String>> = _selectedSaveNames.asStateFlow()
+
     private val _showCreateDialog = MutableStateFlow(false)
     val showCreateDialog: StateFlow<Boolean> = _showCreateDialog.asStateFlow()
 
@@ -319,6 +322,10 @@ class MemcardViewModel : ViewModel() {
     private fun setLoadedState(loaded: CardUiState.Loaded, triggerIconPreload: Boolean = true) {
         currentLoadedCard = loaded
         _uiState.value = loaded
+        val validNames = loaded.saves.map { it.directoryName }.toSet()
+        if (_selectedSaveNames.value.any { it !in validNames }) {
+            _selectedSaveNames.value = _selectedSaveNames.value.filter { it in validNames }.toSet()
+        }
         if (triggerIconPreload) {
             startIconPreloading(loaded.saves, loaded.memcard)
         }
@@ -659,6 +666,27 @@ class MemcardViewModel : ViewModel() {
 
     fun selectSave(save: Ps2Save?) {
         _selectedSave.value = save
+    }
+
+    fun toggleSaveSelection(directoryName: String) {
+        val current = _selectedSaveNames.value
+        _selectedSaveNames.value = if (current.contains(directoryName)) {
+            current - directoryName
+        } else {
+            current + directoryName
+        }
+    }
+
+    fun selectSaveForMultiSelect(directoryName: String) {
+        _selectedSaveNames.value = _selectedSaveNames.value + directoryName
+    }
+
+    fun selectAllSaves(directoryNames: Collection<String>) {
+        _selectedSaveNames.value = directoryNames.toSet()
+    }
+
+    fun clearSelection() {
+        _selectedSaveNames.value = emptySet()
     }
 
     fun setShowCreateDialog(show: Boolean) {
@@ -1216,11 +1244,47 @@ class MemcardViewModel : ViewModel() {
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             _selectedSave.value = null
+                            _selectedSaveNames.value = _selectedSaveNames.value - saveName
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
                             _snackbarMessage.value = if (wasReverted) "Reverted deletion of $saveName" else "Deleted save $saveName"
                         } else {
                             _snackbarMessage.value = "Failed to delete save $saveName"
+                        }
+                    } catch (e: Throwable) {
+                        _snackbarMessage.value = "Delete error: ${e.message}"
+                    }
+                }
+            }
+        }
+    }
+
+    fun deleteSaves(saveNames: Collection<String>) {
+        if (saveNames.isEmpty()) return
+        viewModelScope.launch {
+            historyMutex.withLock {
+                val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
+                withContext(Dispatchers.Default) {
+                    try {
+                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
+                        var deletedCount = 0
+                        for (name in saveNames) {
+                            if (current.memcard.deleteSave(name)) {
+                                deletedCount++
+                            }
+                        }
+                        if (deletedCount > 0) {
+                            val actionDesc = if (deletedCount == 1) "Delete save ${saveNames.first()}" else "Delete $deletedCount saves"
+                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
+                            val saves = current.memcard.listSaves()
+                            val stats = current.memcard.getStats()
+                            _selectedSave.value = null
+                            _selectedSaveNames.value = emptySet()
+                            val loaded = current.copy(saves = saves, stats = stats)
+                            setLoadedState(loaded)
+                            _snackbarMessage.value = if (wasReverted) "Reverted deletion of $deletedCount saves" else "Deleted $deletedCount saves"
+                        } else {
+                            _snackbarMessage.value = "Failed to delete selected saves"
                         }
                     } catch (e: Throwable) {
                         _snackbarMessage.value = "Delete error: ${e.message}"
@@ -1363,7 +1427,14 @@ class MemcardViewModel : ViewModel() {
         return current.memcard.exportSaveAsZip(saveName)
     }
 
-
+    fun exportSave(saveName: String, format: xyz.savesx2.core.BatchExportFormat): ByteArray? {
+        return when (format) {
+            xyz.savesx2.core.BatchExportFormat.PSU -> exportPsu(saveName)
+            xyz.savesx2.core.BatchExportFormat.MAX -> exportMax(saveName)
+            xyz.savesx2.core.BatchExportFormat.CBS -> exportCbs(saveName)
+            xyz.savesx2.core.BatchExportFormat.XPS -> exportXps(saveName)
+        }
+    }
 
     fun closeCard() {
         iconPreloadJob?.cancel()
@@ -1374,6 +1445,7 @@ class MemcardViewModel : ViewModel() {
         clearUndoRedoHistory()
         _hasUnsavedChanges.value = false
         _selectedSave.value = null
+        _selectedSaveNames.value = emptySet()
         _searchQuery.value = ""
     }
 

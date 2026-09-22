@@ -20,12 +20,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,6 +64,10 @@ fun MainScreen(
     onFilterChange: (FilterType) -> Unit = {},
     sortBy: SortBy = SortBy.NAME_ASC,
     onSortChange: (SortBy) -> Unit = {},
+    selectedSaveNames: Set<String> = emptySet(),
+    onToggleSelectSave: (Ps2Save) -> Unit = {},
+    onStartMultiSelect: (Ps2Save) -> Unit = {},
+    onExportSelected: () -> Unit = {},
     onSaveClick: (Ps2Save) -> Unit,
     onExportPsu: (Ps2Save) -> Unit,
     onExportZip: (Ps2Save) -> Unit,
@@ -106,7 +112,27 @@ fun MainScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         floatingActionButton = {
-            if (!stats.isFormatted) {
+            if (selectedSaveNames.isNotEmpty()) {
+                ExtendedFloatingActionButton(
+                    onClick = onExportSelected,
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Export ${selectedSaveNames.size} ${if (selectedSaveNames.size == 1) "Save" else "Saves"}",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            } else if (!stats.isFormatted) {
                 FloatingActionButton(
                     onClick = onFormatCard,
                     modifier = Modifier.height(40.dp),
@@ -282,7 +308,11 @@ fun MainScreen(
                         ) { save ->
                             SaveCard(
                                 save = save,
+                                isSelected = save.directoryName in selectedSaveNames,
+                                isMultiSelectMode = selectedSaveNames.isNotEmpty(),
                                 onClick = onSaveClick,
+                                onLongClick = onStartMultiSelect,
+                                onToggleSelect = onToggleSelectSave,
                                 onExportPsu = onExportPsu,
                                 onExportZip = onExportZip,
                                 onDelete = onDeleteSave,
