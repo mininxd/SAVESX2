@@ -43,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
@@ -732,7 +731,10 @@ class MainActivity : ComponentActivity() {
                                     Snackbar(
                                         snackbarData = data,
                                         shape = RoundedCornerShape(10.dp),
-                                        modifier = Modifier.alpha(0.5f)
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        actionColor = MaterialTheme.colorScheme.primary,
+                                        dismissActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
