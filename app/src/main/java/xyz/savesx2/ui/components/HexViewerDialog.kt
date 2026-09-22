@@ -213,7 +213,6 @@ fun HexViewerDialog(
         redoStack.clear()
         modifiedOffsets = emptySet()
         dataVersion++
-        Toast.makeText(context, "Reverted all modifications", Toast.LENGTH_SHORT).show()
     }
 
     val rowCount = (currentBytes.size + 15) / 16

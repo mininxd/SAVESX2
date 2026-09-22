@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
@@ -104,14 +105,33 @@ class MainActivity : ComponentActivity() {
 
     private val snackbarHostState = SnackbarHostState()
 
+    private fun formatToastMessage(message: String): String {
+        return message.split(" ").joinToString(" ") { word ->
+            val cleanWord = word.trim('\'', '"', '`', '(', ')')
+            if (cleanWord.length > 20 && !cleanWord.startsWith("http")) {
+                val leading = word.takeWhile { it in "'\"`(" }
+                val trailing = word.takeLastWhile { it in "'\"`).,!?" }
+                val core = word.substring(leading.length, word.length - trailing.length)
+                if (core.length > 20) {
+                    "$leading${core.take(17)}...$trailing"
+                } else {
+                    word
+                }
+            } else {
+                word
+            }
+        }
+    }
+
     /**
      * Shows an in-app notification / toast message with swipe-to-dismiss (slide to hide) support.
      */
     private fun showToast(message: String, isLong: Boolean = false) {
+        val formatted = formatToastMessage(message)
         lifecycleScope.launch {
             snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(
-                message = message,
+                message = formatted,
                 duration = if (isLong) SnackbarDuration.Long else SnackbarDuration.Short
             )
         }
@@ -207,7 +227,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } catch (t: Throwable) {
                     withContext(Dispatchers.Main) {
-                        showToast("Failed to create card: ${t.message ?: "Out of memory"}", isLong = true)
+                        showToast("Failed to create card", isLong = true)
                         viewModel.setError("Failed to create card: ${t.message ?: "Out of memory"}")
                     }
                 }
@@ -271,7 +291,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } catch (t: Throwable) {
                     withContext(Dispatchers.Main) {
-                        showToast("Failed to save card: ${t.message ?: "Error"}", isLong = true)
+                        showToast("Failed to save card", isLong = true)
                         pendingActionAfterSave = null
                         viewModel.clearLoading()
                     }
@@ -294,8 +314,8 @@ class MainActivity : ComponentActivity() {
                     val bytes = stream.readBytes()
                     viewModel.importSaveWithValidation(bytes, fileName)
                 }
-            } catch (e: Exception) {
-                showToast("Failed to read save file: ${e.message}", isLong = true)
+            } catch (_: Exception) {
+                showToast("Failed to read save file", isLong = true)
             }
         }
     }
@@ -309,8 +329,8 @@ class MainActivity : ComponentActivity() {
                         out.write(bytes)
                     }
                     showToast("PSU save exported successfully!")
-                } catch (e: Exception) {
-                    showToast("Export failed: ${e.message}", isLong = true)
+                } catch (_: Exception) {
+                    showToast("Failed to export save", isLong = true)
                 }
             }
         }
@@ -326,8 +346,8 @@ class MainActivity : ComponentActivity() {
                         out.write(bytes)
                     }
                     showToast("Action Replay MAX save exported successfully!")
-                } catch (e: Exception) {
-                    showToast("Export failed: ${e.message}", isLong = true)
+                } catch (_: Exception) {
+                    showToast("Failed to export save", isLong = true)
                 }
             }
         }
@@ -343,8 +363,8 @@ class MainActivity : ComponentActivity() {
                         out.write(bytes)
                     }
                     showToast("CodeBreaker (.cbs) save exported successfully!")
-                } catch (e: Exception) {
-                    showToast("Export failed: ${e.message}", isLong = true)
+                } catch (_: Exception) {
+                    showToast("Failed to export save", isLong = true)
                 }
             }
         }
@@ -360,8 +380,8 @@ class MainActivity : ComponentActivity() {
                         out.write(bytes)
                     }
                     showToast("SharkPort / X-Port (.xps) save exported successfully!")
-                } catch (e: Exception) {
-                    showToast("Export failed: ${e.message}", isLong = true)
+                } catch (_: Exception) {
+                    showToast("Failed to export save", isLong = true)
                 }
             }
         }
@@ -377,8 +397,8 @@ class MainActivity : ComponentActivity() {
                         out.write(bytes)
                     }
                     showToast("ZIP archive exported successfully!")
-                } catch (e: Exception) {
-                    showToast("Export failed: ${e.message}", isLong = true)
+                } catch (_: Exception) {
+                    showToast("Failed to export save", isLong = true)
                 }
             }
         }
@@ -439,9 +459,9 @@ class MainActivity : ComponentActivity() {
                 try {
                     val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                     manageStorageLauncher.launch(intent)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     isWaitingForActivityResult = false
-                    showToast("Could not open storage settings: ${e.message}", isLong = true)
+                    showToast("Could not open storage settings", isLong = true)
                 }
             }
         } else {
@@ -535,7 +555,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(snackbarMessage) {
                     snackbarMessage?.let { msg ->
                         snackbarHostState.currentSnackbarData?.dismiss()
-                        snackbarHostState.showSnackbar(msg)
+                        snackbarHostState.showSnackbar(formatToastMessage(msg))
                         viewModel.clearSnackbar()
                     }
                 }
@@ -711,7 +731,8 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Snackbar(
                                         snackbarData = data,
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.alpha(0.5f)
                                     )
                                 }
                             }
@@ -1110,8 +1131,8 @@ class MainActivity : ComponentActivity() {
                                                     data = Uri.parse("package:$legacyPkg")
                                                 }
                                                 startActivity(appDetailsIntent)
-                                            } catch (e: Exception) {
-                                                showToast("Could not launch uninstaller: ${e.message}")
+                                            } catch (_: Exception) {
+                                                showToast("Could not launch uninstaller")
                                             }
                                         }
                                     }
@@ -1184,9 +1205,9 @@ class MainActivity : ComponentActivity() {
                                 viewModel.clearLoading()
                             }
                         }
-                    } catch (t: Throwable) {
+                    } catch (_: Throwable) {
                         withContext(Dispatchers.Main) {
-                            showToast("Failed to save folder card: ${t.message ?: "Error"}", isLong = true)
+                            showToast("Failed to save folder card", isLong = true)
                             viewModel.clearLoading()
                         }
                     }
@@ -1363,7 +1384,7 @@ class MainActivity : ComponentActivity() {
             } else if (result.first > 0) {
                 showToast("Exported ${result.first} saves (${result.second} failed) to ${result.third}", isLong = true)
             } else {
-                showToast("Batch export failed: ${result.third}", isLong = true)
+                showToast("Batch export failed", isLong = true)
             }
         }
     }

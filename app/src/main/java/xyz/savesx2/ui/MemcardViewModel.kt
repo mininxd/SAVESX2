@@ -71,6 +71,15 @@ enum class SortBy {
     SIZE_DESC
 }
 
+fun truncateSaveName(name: String, maxLen: Int = 20): String {
+    val trimmed = name.trim()
+    return if (trimmed.length > maxLen) {
+        "${trimmed.take(maxLen - 3)}..."
+    } else {
+        trimmed
+    }
+}
+
 data class HexEditorSession(
     val title: String,
     val data: ByteArray,
@@ -532,8 +541,8 @@ class MemcardViewModel : ViewModel() {
                         val selName = _selectedSave.value?.directoryName
                         _selectedSave.value = if (selName != null) savesWithIcons.firstOrNull { it.directoryName == selName } else null
                         _snackbarMessage.value = "Undo: ${snapshotToRestore.actionDescription}"
-                    } catch (t: Throwable) {
-                        _snackbarMessage.value = "Undo error: ${t.message ?: "Failed to restore state"}"
+                    } catch (_: Throwable) {
+                        _snackbarMessage.value = "Failed to restore state"
                     }
                 }
             }
@@ -588,8 +597,8 @@ class MemcardViewModel : ViewModel() {
                         val selName = _selectedSave.value?.directoryName
                         _selectedSave.value = if (selName != null) savesWithIcons.firstOrNull { it.directoryName == selName } else null
                         _snackbarMessage.value = "Redo: ${snapshotToRestore.actionDescription}"
-                    } catch (t: Throwable) {
-                        _snackbarMessage.value = "Redo error: ${t.message ?: "Failed to restore state"}"
+                    } catch (_: Throwable) {
+                        _snackbarMessage.value = "Failed to restore state"
                     }
                 }
             }
@@ -621,8 +630,8 @@ class MemcardViewModel : ViewModel() {
                             val selName = _selectedSave.value?.directoryName
                             _selectedSave.value = if (selName != null) saves.firstOrNull { it.directoryName == selName } else null
                             _snackbarMessage.value = "Editing cancelled"
-                        } catch (t: Throwable) {
-                            _snackbarMessage.value = "Cancel edit error: ${t.message ?: "Failed"}"
+                        } catch (_: Throwable) {
+                            _snackbarMessage.value = "Failed to cancel edit"
                         }
                     }
                 } else {
@@ -788,11 +797,11 @@ class MemcardViewModel : ViewModel() {
                         if (isRawCard) {
                             val newCard = Ps2Memcard.open(newData)
                             if (newCard != null) {
-                                val wasReverted = pushUndoSnapshot(snapshotBefore, "Raw hex edit on ${current.cardName}", newCard.getRawDataDirect())
+                                pushUndoSnapshot(snapshotBefore, "Raw hex edit on ${truncateSaveName(current.cardName)}", newCard.getRawDataDirect())
                                 val saves = newCard.listSaves()
                                 val stats = newCard.getStats()
                                 setLoadedState(current.copy(memcard = newCard, saves = saves, stats = stats))
-                                _snackbarMessage.value = if (wasReverted) "Reverted raw card edit" else "Updated raw card data"
+                                _snackbarMessage.value = "Updated raw card data"
                                 _hexViewerData.value = null
                                 _hexEditorSession.value = null
                             } else {
@@ -804,7 +813,7 @@ class MemcardViewModel : ViewModel() {
                         if (saveName != null && fileName != null) {
                             val ok = current.memcard.updateSaveFile(saveName, fileName, newData)
                             if (ok) {
-                                val wasReverted = pushUndoSnapshot(snapshotBefore, "Edit $fileName in $saveName", current.memcard.getRawDataDirect())
+                                pushUndoSnapshot(snapshotBefore, "Edit ${truncateSaveName(fileName)} in ${truncateSaveName(saveName)}", current.memcard.getRawDataDirect())
                                 val saves = current.memcard.listSaves()
                                 val stats = current.memcard.getStats()
                                 val updatedSave = saves.firstOrNull { it.directoryName == saveName }
@@ -812,15 +821,15 @@ class MemcardViewModel : ViewModel() {
                                 if (_selectedSave.value?.directoryName == saveName) {
                                     _selectedSave.value = updatedSave
                                 }
-                                _snackbarMessage.value = if (wasReverted) "Reverted edit to $fileName" else "Saved changes to $fileName"
+                                _snackbarMessage.value = "Saved changes to ${truncateSaveName(fileName)}"
                                 _hexViewerData.value = null
                                 _hexEditorSession.value = null
                             } else {
-                                _snackbarMessage.value = "Failed to update $fileName"
+                                _snackbarMessage.value = "Failed to update ${truncateSaveName(fileName)}"
                             }
                         }
-                    } catch (t: Throwable) {
-                        _snackbarMessage.value = "Save file edit error: ${t.message ?: "Failed"}"
+                    } catch (_: Throwable) {
+                        _snackbarMessage.value = "Failed to save file changes"
                     }
                 }
             }
@@ -841,8 +850,8 @@ class MemcardViewModel : ViewModel() {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
                         val ok = current.memcard.setSaveProtection(saveName, isProtected)
                         if (ok) {
-                            val actionDesc = if (isProtected) "Protect $saveName" else "Unprotect $saveName"
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
+                            val actionDesc = if (isProtected) "Protect ${truncateSaveName(saveName)}" else "Unprotect ${truncateSaveName(saveName)}"
+                            pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             val updatedSave = saves.firstOrNull { it.directoryName == saveName }
@@ -850,16 +859,14 @@ class MemcardViewModel : ViewModel() {
                             if (_selectedSave.value?.directoryName == saveName) {
                                 _selectedSave.value = updatedSave
                             }
-                            _snackbarMessage.value = if (wasReverted) {
-                                if (isProtected) "Reverted lock on $saveName" else "Reverted unlock on $saveName"
-                            } else if (isProtected) {
-                                "Marked $saveName as copy-protected"
+                            _snackbarMessage.value = if (isProtected) {
+                                "Marked ${truncateSaveName(saveName)} as copy-protected"
                             } else {
-                                "Removed copy-protection from $saveName"
+                                "Removed copy-protection from ${truncateSaveName(saveName)}"
                             }
                         }
-                    } catch (t: Throwable) {
-                        _snackbarMessage.value = "Protection update error: ${t.message ?: "Failed"}"
+                    } catch (_: Throwable) {
+                        _snackbarMessage.value = "Failed to update protection"
                     }
                 }
             }
@@ -875,7 +882,7 @@ class MemcardViewModel : ViewModel() {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
                         val ok = current.memcard.updateSaveTimestamps(saveName, created, modified)
                         if (ok) {
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Edit timestamps for $saveName", current.memcard.getRawDataDirect())
+                            pushUndoSnapshot(snapshotBefore, "Edit timestamps for ${truncateSaveName(saveName)}", current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             val updatedSave = saves.firstOrNull { it.directoryName == saveName }
@@ -883,10 +890,10 @@ class MemcardViewModel : ViewModel() {
                             if (_selectedSave.value?.directoryName == saveName) {
                                 _selectedSave.value = updatedSave
                             }
-                            _snackbarMessage.value = if (wasReverted) "Reverted timestamp edit for $saveName" else "Updated timestamps for $saveName"
+                            _snackbarMessage.value = "Updated timestamps for ${truncateSaveName(saveName)}"
                         }
-                    } catch (t: Throwable) {
-                        _snackbarMessage.value = "Timestamp update error: ${t.message ?: "Failed"}"
+                    } catch (_: Throwable) {
+                        _snackbarMessage.value = "Failed to update timestamps"
                     }
                 }
             }
@@ -946,7 +953,7 @@ class MemcardViewModel : ViewModel() {
                                 )
                             )
                         }
-                        _snackbarMessage.value = "Loaded folder card $cardName (${saves.size} saves)"
+                        _snackbarMessage.value = "Loaded folder card ${truncateSaveName(cardName)} (${saves.size} saves)"
                     } else {
                         _uiState.value = CardUiState.Error("Failed to load PCSX2 folder memory card from ${folder.name}.")
                     }
@@ -1010,7 +1017,7 @@ class MemcardViewModel : ViewModel() {
                                             )
                                         )
                                     }
-                                    _snackbarMessage.value = "Loaded folder card $cardName (${saves.size} saves)"
+                                    _snackbarMessage.value = "Loaded folder card ${truncateSaveName(cardName)} (${saves.size} saves)"
                                 } else {
                                     _uiState.value = CardUiState.Error("Failed to load PCSX2 folder memory card from ${folder.name}.")
                                 }
@@ -1054,7 +1061,7 @@ class MemcardViewModel : ViewModel() {
                                         )
                                     )
                                 }
-                                _snackbarMessage.value = "Loaded $fileName (${saves.size} saves)"
+                                _snackbarMessage.value = "Loaded ${truncateSaveName(fileName)} (${saves.size} saves)"
                             } else {
                                 _uiState.value = CardUiState.Error("Invalid PS2 Memory Card image format.")
                             }
@@ -1101,7 +1108,7 @@ class MemcardViewModel : ViewModel() {
                             stats = stats
                         )
                         setLoadedState(loaded)
-                        _snackbarMessage.value = "Loaded $name (${saves.size} saves)"
+                        _snackbarMessage.value = "Loaded ${truncateSaveName(name)} (${saves.size} saves)"
                     } else {
                         _uiState.value = CardUiState.Error("Invalid PS2 Memory Card image format.")
                     }
@@ -1138,7 +1145,7 @@ class MemcardViewModel : ViewModel() {
                             stats = stats
                         )
                         setLoadedState(loaded)
-                        _snackbarMessage.value = "Created $name successfully!"
+                        _snackbarMessage.value = "Created ${truncateSaveName(name)} successfully!"
                     } else {
                         _uiState.value = CardUiState.Error("Failed to initialize memory card.")
                     }
@@ -1161,7 +1168,7 @@ class MemcardViewModel : ViewModel() {
                         val bytes = MemcardFormatter.format(sizeInMB, current.memcard.hasEcc)
                         val card = Ps2Memcard.open(bytes)
                         if (card != null) {
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Format card", card.getRawDataDirect())
+                            pushUndoSnapshot(snapshotBefore, "Format card", card.getRawDataDirect())
                             val loaded = CardUiState.Loaded(
                                 cardName = current.cardName,
                                 cardUri = current.cardUri,
@@ -1170,7 +1177,7 @@ class MemcardViewModel : ViewModel() {
                                 stats = card.getStats()
                             )
                             setLoadedState(loaded)
-                            _snackbarMessage.value = if (wasReverted) "Reverted format card" else "Memory card formatted successfully."
+                            _snackbarMessage.value = "Memory card formatted successfully."
                         }
                     } catch (t: Throwable) {
                         _uiState.value = CardUiState.Error("Format error: ${t.message ?: "Out of memory"}")
@@ -1200,7 +1207,7 @@ class MemcardViewModel : ViewModel() {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
                         val success = current.memcard.resize(newSizeMb)
                         if (success) {
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Resize card to ${newSizeMb}MB", current.memcard.getRawDataDirect())
+                            pushUndoSnapshot(snapshotBefore, "Resize card to ${newSizeMb}MB", current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves(forceRefresh = true)
                             val stats = current.memcard.getStats()
                             val loaded = CardUiState.Loaded(
@@ -1211,7 +1218,7 @@ class MemcardViewModel : ViewModel() {
                                 stats = stats
                             )
                             setLoadedState(loaded)
-                            _snackbarMessage.value = if (wasReverted) "Reverted resize card" else "Memory card expanded to ${newSizeMb}MB successfully."
+                            _snackbarMessage.value = "Memory card expanded to ${newSizeMb}MB successfully."
                         } else {
                             val reloaded = CardUiState.Loaded(
                                 cardName = current.cardName,
@@ -1240,19 +1247,19 @@ class MemcardViewModel : ViewModel() {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
                         val success = current.memcard.deleteSave(saveName)
                         if (success) {
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, "Delete save $saveName", current.memcard.getRawDataDirect())
+                            pushUndoSnapshot(snapshotBefore, "Delete save ${truncateSaveName(saveName)}", current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             _selectedSave.value = null
                             _selectedSaveNames.value = _selectedSaveNames.value - saveName
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = if (wasReverted) "Reverted deletion of $saveName" else "Deleted save $saveName"
+                            _snackbarMessage.value = "Deleted save ${truncateSaveName(saveName)}"
                         } else {
-                            _snackbarMessage.value = "Failed to delete save $saveName"
+                            _snackbarMessage.value = "Failed to delete save ${truncateSaveName(saveName)}"
                         }
-                    } catch (e: Throwable) {
-                        _snackbarMessage.value = "Delete error: ${e.message}"
+                    } catch (_: Throwable) {
+                        _snackbarMessage.value = "Failed to delete save"
                     }
                 }
             }
@@ -1274,20 +1281,20 @@ class MemcardViewModel : ViewModel() {
                             }
                         }
                         if (deletedCount > 0) {
-                            val actionDesc = if (deletedCount == 1) "Delete save ${saveNames.first()}" else "Delete $deletedCount saves"
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
+                            val actionDesc = if (deletedCount == 1) "Delete save ${truncateSaveName(saveNames.first())}" else "Delete $deletedCount saves"
+                            pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             _selectedSave.value = null
                             _selectedSaveNames.value = emptySet()
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = if (wasReverted) "Reverted deletion of $deletedCount saves" else "Deleted $deletedCount saves"
+                            _snackbarMessage.value = "Deleted $deletedCount saves"
                         } else {
                             _snackbarMessage.value = "Failed to delete selected saves"
                         }
-                    } catch (e: Throwable) {
-                        _snackbarMessage.value = "Delete error: ${e.message}"
+                    } catch (_: Throwable) {
+                        _snackbarMessage.value = "Failed to delete selected saves"
                     }
                 }
             }
@@ -1312,18 +1319,18 @@ class MemcardViewModel : ViewModel() {
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
                             val newSave = saves.firstOrNull { old -> current.saves.none { it.directoryName == old.directoryName } }
-                            val actionDesc = if (newSave != null) "Import save ${newSave.directoryName}" else "Import save"
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
+                            val actionDesc = if (newSave != null) "Import save ${truncateSaveName(newSave.directoryName)}" else "Import save"
+                            pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = if (wasReverted) "Reverted import of '${newSave?.directoryName ?: "save"}'" else if (newSave != null) "Imported save '${newSave.directoryName}' successfully!" else "Imported save successfully!"
+                            _snackbarMessage.value = if (newSave != null) "Imported save '${truncateSaveName(newSave.directoryName)}' successfully!" else "Imported save successfully!"
                         } else {
                             setLoadedState(current)
                             _snackbarMessage.value = "Failed to import save (insufficient space or invalid format)."
                         }
-                    } catch (e: Throwable) {
+                    } catch (_: Throwable) {
                         setLoadedState(current)
-                        _snackbarMessage.value = "Import error: ${e.message}"
+                        _snackbarMessage.value = "Failed to import save"
                     }
                 }
             }
@@ -1334,16 +1341,16 @@ class MemcardViewModel : ViewModel() {
         val type = Ps2FileDetector.detect(bytes, fileName)
         when (type) {
             Ps2FileType.PS2_FOLDER_MEMCARD -> {
-                _snackbarMessage.value = "'$fileName' is a memory card superblock, not a savegame. Use 'Open Card' to open it."
+                _snackbarMessage.value = "'${truncateSaveName(fileName)}' is a memory card superblock, not a savegame. Use 'Open Card' to open it."
             }
             Ps2FileType.PS2_MEMCARD_IMAGE -> {
-                _snackbarMessage.value = "'$fileName' is a PS2 memory card image, not a savegame. Use 'Open Card' to open it."
+                _snackbarMessage.value = "'${truncateSaveName(fileName)}' is a PS2 memory card image, not a savegame. Use 'Open Card' to open it."
             }
             Ps2FileType.INVALID -> {
                 if (ZipSaveHandler.isZip(bytes) || fileName.endsWith(".zip", ignoreCase = true)) {
-                    _snackbarMessage.value = "ZIP archive '$fileName' does not contain a valid PS2 savegame (missing or invalid icon.sys)."
+                    _snackbarMessage.value = "ZIP archive '${truncateSaveName(fileName)}' does not contain a valid PS2 savegame (missing or invalid icon.sys)."
                 } else {
-                    _snackbarMessage.value = "'$fileName' is not a valid PS2 savegame (.psu, .max, .cbs, .xps, .zip)."
+                    _snackbarMessage.value = "'${truncateSaveName(fileName)}' is not a valid PS2 savegame (.psu, .max, .cbs, .xps, .zip)."
                 }
             }
             Ps2FileType.SAVEGAME_PSU,
@@ -1366,13 +1373,13 @@ class MemcardViewModel : ViewModel() {
             return
         }
         if (!FolderMemcardHandler.isValidSaveFolder(saveDir)) {
-            _snackbarMessage.value = "Folder '${saveDir.name}' is not a valid PS2 savegame folder (missing or invalid icon.sys)."
+            _snackbarMessage.value = "Folder '${truncateSaveName(saveDir.name)}' is not a valid PS2 savegame folder (missing or invalid icon.sys)."
             return
         }
         viewModelScope.launch {
             historyMutex.withLock {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
-                _uiState.value = CardUiState.Loading("Importing Savegame Folder ${saveDir.name}...")
+                _uiState.value = CardUiState.Loading("Importing Savegame Folder ${truncateSaveName(saveDir.name)}...")
                 withContext(Dispatchers.Default) {
                     try {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
@@ -1380,18 +1387,18 @@ class MemcardViewModel : ViewModel() {
                         if (success) {
                             val saves = current.memcard.listSaves()
                             val stats = current.memcard.getStats()
-                            val actionDesc = "Import save ${saveDir.name}"
-                            val wasReverted = pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
+                            val actionDesc = "Import save ${truncateSaveName(saveDir.name)}"
+                            pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
-                            _snackbarMessage.value = if (wasReverted) "Reverted import of '${saveDir.name}'" else "Imported save ${saveDir.name} successfully!"
+                            _snackbarMessage.value = "Imported save ${truncateSaveName(saveDir.name)} successfully!"
                         } else {
                             setLoadedState(current)
                             _snackbarMessage.value = "Failed to import save folder (insufficient space or invalid format)."
                         }
-                    } catch (e: Throwable) {
+                    } catch (_: Throwable) {
                         setLoadedState(current)
-                        _snackbarMessage.value = "Import error: ${e.message}"
+                        _snackbarMessage.value = "Failed to import save folder"
                     }
                 }
             }
