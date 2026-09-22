@@ -646,6 +646,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                Scaffold(
                     topBar = {
                         if (selectedSaveNames.isNotEmpty()) {
                             val loaded = uiState as? CardUiState.Loaded

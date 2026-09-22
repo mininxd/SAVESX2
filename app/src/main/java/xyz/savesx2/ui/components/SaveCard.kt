@@ -262,43 +262,44 @@ fun SaveCard(
                         )
                     }
 
-                if (menuExpanded) {
-                    DropdownMenu(
-                        expanded = true,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Details") },
-                            leadingIcon = { Icon(Icons.Default.Info, null) },
-                            onClick = {
-                                menuExpanded = false
-                                handleCardClick()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Export PSU") },
-                            leadingIcon = { Icon(Icons.Default.FileDownload, null) },
-                            onClick = {
-                                menuExpanded = false
-                                handleExportPsu()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Export ZIP") },
-                            leadingIcon = { Icon(Icons.Default.FolderZip, null) },
-                            onClick = {
-                                menuExpanded = false
-                                handleExportZip()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuExpanded = false
-                                handleDelete()
-                            }
-                        )
+                    if (menuExpanded) {
+                        DropdownMenu(
+                            expanded = true,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Details") },
+                                leadingIcon = { Icon(Icons.Default.Info, null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    handleCardClick()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export PSU") },
+                                leadingIcon = { Icon(Icons.Default.FileDownload, null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    handleExportPsu()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export ZIP") },
+                                leadingIcon = { Icon(Icons.Default.FolderZip, null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    handleExportZip()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menuExpanded = false
+                                    handleDelete()
+                                }
+                            )
+                        }
                     }
                 }
             }
