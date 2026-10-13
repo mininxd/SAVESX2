@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -34,6 +35,7 @@ fun MultiSelectHeader(
     isAllSelected: Boolean,
     onToggleSelectAll: () -> Unit,
     onExport: () -> Unit,
+    onShare: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -81,6 +83,16 @@ fun MultiSelectHeader(
                         text = "Export",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            if (onShare != null) {
+                IconButton(onClick = onShare) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share selected",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }

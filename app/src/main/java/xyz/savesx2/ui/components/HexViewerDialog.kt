@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -230,6 +231,7 @@ fun HexViewerDialog(
     var showEditByteDialog by remember { mutableStateOf(false) }
     var showWriteDataDialog by remember { mutableStateOf(false) }
     var showDiscardConfirmDialog by remember { mutableStateOf(false) }
+    var showChecksumDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     val monoStyle = TextStyle(
@@ -491,6 +493,19 @@ fun HexViewerDialog(
                             }
                         }
 
+                        // Checksum Tools Button
+                        IconButton(
+                            onClick = { showChecksumDialog = true },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = "Checksum Tools",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
                         // Overflow Menu
                         Box {
                             IconButton(
@@ -509,6 +524,15 @@ fun HexViewerDialog(
                                 expanded = menuExpanded,
                                 onDismissRequest = { menuExpanded = false }
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text("Checksum Tools & Hashes") },
+                                    leadingIcon = { Icon(Icons.Default.Security, null, modifier = Modifier.size(18.dp)) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showChecksumDialog = true
+                                    }
+                                )
+                                HorizontalDivider()
                                 DropdownMenuItem(
                                     text = { Text("Copy Hex Dump") },
                                     leadingIcon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(18.dp)) },
@@ -1191,6 +1215,19 @@ fun HexViewerDialog(
                 Button(onClick = { showDiscardConfirmDialog = false }) {
                     Text("Keep Editing")
                 }
+            }
+        )
+    }
+
+    if (showChecksumDialog) {
+        ChecksumFixerDialog(
+            fileName = title,
+            dirName = "",
+            data = currentBytes,
+            onDismiss = { showChecksumDialog = false },
+            isReadOnly = isReadOnly,
+            onApplyPatch = { offset, newBytes ->
+                applyRangeEdit(offset, newBytes)
             }
         )
     }

@@ -63,9 +63,11 @@ import xyz.savesx2.core.FolderMemcardHandler
 import xyz.savesx2.core.RecentCard
 import xyz.savesx2.core.StoragePermissionHelper
 import java.io.File
+import androidx.core.content.FileProvider
 import xyz.savesx2.ui.components.AppHeader
 import xyz.savesx2.ui.components.BatchExportDialog
 import xyz.savesx2.ui.components.CardStatsDialog
+import xyz.savesx2.ui.components.ChecksumFixerDialog
 import xyz.savesx2.ui.components.CreateCardDialog
 import xyz.savesx2.ui.components.EditTimestampsDialog
 import xyz.savesx2.ui.components.FormatCardDialog
@@ -516,9 +518,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val appVersion = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.3"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.0"
         } catch (_: Exception) {
-            "1.7.3"
+            "1.8.0"
         }
         viewModel.checkUpdate(appVersion)
 
@@ -564,6 +566,7 @@ class MainActivity : ComponentActivity() {
                 var showUnsavedChangesDialog by remember { mutableStateOf(false) }
                 var showReloadConfirmDialog by remember { mutableStateOf(false) }
                 var editingTimestampsSave by remember { mutableStateOf<Ps2Save?>(null) }
+                var inspectingChecksumFile by remember { mutableStateOf<Pair<Ps2Save, xyz.savesx2.core.Ps2SaveFile>?>(null) }
 
                 BackHandler(enabled = selectedSaveNames.isNotEmpty()) {
                     viewModel.clearSelection()
@@ -684,6 +687,10 @@ class MainActivity : ComponentActivity() {
                                 onExport = {
                                     showBatchExportDialog = true
                                 },
+                                onShare = {
+                                    val selected = allSaves.filter { it.directoryName in selectedSaveNames }
+                                    triggerBatchShare(selected)
+                                },
                                 onDelete = {
                                     showBatchDeleteConfirmDialog = true
                                 },
@@ -766,9 +773,9 @@ class MainActivity : ComponentActivity() {
                                     updateStatus = updateStatus,
                                     onCheckUpdate = {
                                          val version = try {
-                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.3"
+                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.0"
                                          } catch (e: Exception) {
-                                             "1.7.3"
+                                             "1.8.0"
                                          }
                                         viewModel.checkUpdate(version)
                                     }
@@ -909,10 +916,39 @@ class MainActivity : ComponentActivity() {
                                 fileName = file.name
                             )
                         },
+                        onInspectFileChecksum = { file ->
+                            inspectingChecksumFile = Pair(save, file)
+                        },
+                        onShareSave = { format ->
+                            triggerShareSave(save, format)
+                        },
                         onView3dIcon = {
                             viewModel.open3dIconViewer(save)
                         },
                         onLoadIcon = { viewModel.loadSaveIcon(it) }
+                    )
+                }
+
+                inspectingChecksumFile?.let { (save, file) ->
+                    val data = file.data ?: (uiState as? CardUiState.Loaded)?.memcard?.getSaveFileBytes(save.directoryName, file.name) ?: ByteArray(0)
+                    ChecksumFixerDialog(
+                        fileName = file.name,
+                        dirName = save.directoryName,
+                        data = data,
+                        onDismiss = { inspectingChecksumFile = null },
+                        isReadOnly = false,
+                        onApplyPatch = { offset, newBytes ->
+                            val currentData = data.copyOf()
+                            if (offset >= 0 && offset + newBytes.size <= currentData.size) {
+                                System.arraycopy(newBytes, 0, currentData, offset, newBytes.size)
+                                viewModel.saveHexEditedFile(
+                                    saveName = save.directoryName,
+                                    fileName = file.name,
+                                    newData = currentData
+                                )
+                                showToast("Repaired checksum for ${file.name}")
+                            }
+                        }
                     )
                 }
 
@@ -1028,9 +1064,9 @@ class MainActivity : ComponentActivity() {
                         onClearRecentCards = { viewModel.clearRecentCards(this@MainActivity) },
                         onDismiss = { viewModel.setShowSettingsDialog(false) },
                         versionName = try {
-                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.7.3"
+                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.0"
                         } catch (_: Exception) {
-                            "1.7.3"
+                            "1.8.0"
                         }
                     )
                 }
@@ -1387,6 +1423,105 @@ class MainActivity : ComponentActivity() {
                 showToast("Exported ${result.first} saves (${result.second} failed) to ${result.third}", isLong = true)
             } else {
                 showToast("Batch export failed", isLong = true)
+            }
+        }
+    }
+
+    private fun triggerShareSave(save: Ps2Save, format: String = "psu") {
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.Default) {
+                if (format == "zip") {
+                    viewModel.exportZip(save.directoryName)
+                } else {
+                    viewModel.exportPsu(save.directoryName)
+                }
+            }
+
+            if (bytes == null) {
+                showToast("Failed to prepare save for sharing")
+                return@launch
+            }
+
+            try {
+                val shareDir = File(cacheDir, "shared_saves").apply { mkdirs() }
+                // Clean older files
+                shareDir.listFiles()?.forEach { file ->
+                    if (System.currentTimeMillis() - file.lastModified() > 3600000L) {
+                        file.delete()
+                    }
+                }
+
+                val ext = if (format == "zip") "zip" else "psu"
+                val filename = ExportFilenameFormat.generateFilename(save, ext, viewModel.exportFilenameFormat.value)
+                val tempFile = File(shareDir, filename)
+                tempFile.writeBytes(bytes)
+
+                val contentUri = FileProvider.getUriForFile(
+                    this@MainActivity,
+                    "${packageName}.fileprovider",
+                    tempFile
+                )
+
+                val mimeType = if (format == "zip") "application/zip" else "application/octet-stream"
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = mimeType
+                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                    putExtra(Intent.EXTRA_SUBJECT, save.displayTitle.ifBlank { save.directoryName })
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                startActivity(Intent.createChooser(shareIntent, "Share Save (${ext.uppercase()})"))
+            } catch (e: Exception) {
+                showToast("Sharing failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun triggerBatchShare(selectedSaves: List<Ps2Save>, format: String = "psu") {
+        if (selectedSaves.isEmpty()) return
+        lifecycleScope.launch {
+            viewModel.setLoading("Preparing ${selectedSaves.size} saves for sharing...")
+            val uris = withContext(Dispatchers.IO) {
+                val shareDir = File(cacheDir, "shared_saves").apply { mkdirs() }
+                val ext = if (format == "zip") "zip" else "psu"
+                val uriList = ArrayList<Uri>()
+                for (save in selectedSaves) {
+                    val bytes = if (format == "zip") {
+                        viewModel.exportZip(save.directoryName)
+                    } else {
+                        viewModel.exportPsu(save.directoryName)
+                    } ?: continue
+
+                    val filename = ExportFilenameFormat.generateFilename(save, ext, viewModel.exportFilenameFormat.value)
+                    val tempFile = File(shareDir, filename)
+                    tempFile.writeBytes(bytes)
+
+                    val contentUri = FileProvider.getUriForFile(
+                        this@MainActivity,
+                        "${packageName}.fileprovider",
+                        tempFile
+                    )
+                    uriList.add(contentUri)
+                }
+                uriList
+            }
+            viewModel.clearLoading()
+
+            if (uris.isEmpty()) {
+                showToast("Failed to prepare saves for sharing")
+                return@launch
+            }
+
+            try {
+                val mimeType = if (format == "zip") "application/zip" else "application/octet-stream"
+                val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = mimeType
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(shareIntent, "Share ${uris.size} Saves"))
+            } catch (e: Exception) {
+                showToast("Sharing failed: ${e.message}")
             }
         }
     }

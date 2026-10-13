@@ -12,6 +12,8 @@ import xyz.savesx2.core.Ps2Memcard
 import xyz.savesx2.core.Ps2SuperBlock
 import xyz.savesx2.core.Ps2Timestamp
 import xyz.savesx2.core.PsuHandler
+import xyz.savesx2.core.ChecksumAlgorithm
+import xyz.savesx2.core.Ps2ChecksumFixer
 import xyz.savesx2.core.RecentCard
 import java.io.File
 import org.junit.Assert.assertArrayEquals
@@ -1003,6 +1005,82 @@ class Ps2MemcardTest {
         assertFalse(card.resize(16))
         // Cannot resize to unsupported capacity
         assertFalse(card.resize(25))
+    }
+
+    @Test
+    fun testChecksumAlgorithmsComputation() {
+        val testData = "123456789".toByteArray(Charsets.US_ASCII)
+
+        // CRC-32 standard check value for "123456789" is 0xCBF43926 (3421760262)
+        val crc = Ps2ChecksumFixer.calculateCrc32(testData)
+        assertEquals(0xCBF43926L, crc)
+
+        // Adler-32 standard check value for "123456789" is 0x091E01DE (152961502)
+        val adler = Ps2ChecksumFixer.calculateAdler32(testData)
+        assertEquals(0x091E01DEL, adler)
+
+        // Sum32: sum of ASCII values 49..57 = 477
+        val sum32 = Ps2ChecksumFixer.calculateSum32(testData)
+        assertEquals(477L, sum32)
+
+        // MD5 of "123456789" is 25f9e794323b453885f5181f1b624d0b
+        val md5 = Ps2ChecksumFixer.calculateMd5(testData)
+        assertEquals("25f9e794323b453885f5181f1b624d0b", md5)
+
+        // SHA-1 of "123456789" is f7c3bc1d808e04732adf679965ccc34ca7ae3441
+        val sha1 = Ps2ChecksumFixer.calculateSha1(testData)
+        assertEquals("f7c3bc1d808e04732adf679965ccc34ca7ae3441", sha1)
+    }
+
+    @Test
+    fun testGtaSanAndreasChecksumDetectionAndRepair() {
+        // Create simulated 202,752-byte GTA SA savegame payload
+        val saveSize = 202752
+        val fakeSave = ByteArray(saveSize) { (it and 0xFF).toByte() }
+
+        // Compute valid checksum and write at end-of-file
+        val expectedSum = Ps2ChecksumFixer.calculateSum32(fakeSave, 0, saveSize - 4)
+        Ps2ChecksumFixer.writeUInt32LE(fakeSave, saveSize - 4, expectedSum)
+
+        // Verify auto-detection reports VALID
+        val profileValid = Ps2ChecksumFixer.detectGameProfile("BASLUS-20946GTA50000", "GTASAsf1.b", fakeSave)
+        assertNotNull(profileValid)
+        assertEquals("Grand Theft Auto: San Andreas", profileValid!!.gameName)
+        assertTrue(profileValid.isValid)
+        assertEquals(expectedSum, profileValid.storedChecksum)
+
+        // Corrupt the checksum
+        Ps2ChecksumFixer.writeUInt32LE(fakeSave, saveSize - 4, 0xDEADBEEFL)
+        val profileCorrupted = Ps2ChecksumFixer.detectGameProfile("BASLUS-20946GTA50000", "GTASAsf1.b", fakeSave)
+        assertNotNull(profileCorrupted)
+        assertFalse(profileCorrupted!!.isValid)
+        assertEquals(0xDEADBEEFL, profileCorrupted.storedChecksum)
+        assertEquals(expectedSum, profileCorrupted.expectedChecksum)
+
+        // Repair using fixDetectedProfile
+        val repaired = Ps2ChecksumFixer.fixDetectedProfile(fakeSave, profileCorrupted)
+        val profileRepaired = Ps2ChecksumFixer.detectGameProfile("BASLUS-20946GTA50000", "GTASAsf1.b", repaired)
+        assertNotNull(profileRepaired)
+        assertTrue(profileRepaired!!.isValid)
+        assertEquals(expectedSum, profileRepaired.storedChecksum)
+    }
+
+    @Test
+    fun testGenericChecksumPatching() {
+        val buffer = ByteArray(64) { 0x55.toByte() }
+
+        // Patch CRC-32 at offset 60 over 0..60
+        val patched = Ps2ChecksumFixer.patchChecksum(
+            data = buffer,
+            targetOffset = 60,
+            rangeStart = 0,
+            rangeLength = 60,
+            algorithm = ChecksumAlgorithm.CRC32
+        )
+
+        val writtenCrc = Ps2ChecksumFixer.readUInt32LE(patched, 60)
+        val expectedCrc = Ps2ChecksumFixer.calculateCrc32(patched, 0, 60)
+        assertEquals(expectedCrc, writtenCrc)
     }
 }
 

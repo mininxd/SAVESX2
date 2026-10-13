@@ -30,13 +30,18 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -77,6 +82,8 @@ fun SaveDetailModal(
     onToggleProtection: (Boolean) -> Unit = {},
     onEditTimestamps: () -> Unit = {},
     onInspectFileHex: (Ps2SaveFile) -> Unit,
+    onInspectFileChecksum: ((Ps2SaveFile) -> Unit)? = null,
+    onShareSave: ((format: String) -> Unit)? = null,
     onView3dIcon: (() -> Unit)? = null,
     onLoadIcon: (suspend (Ps2Save) -> Bitmap?)? = null
 ) {
@@ -381,7 +388,21 @@ fun SaveDetailModal(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            if (onInspectFileChecksum != null) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                IconButton(
+                                    onClick = { onInspectFileChecksum(file) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Security,
+                                        contentDescription = "Checksum Tools",
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 imageVector = Icons.Default.Code,
                                 contentDescription = "Inspect Hex",
@@ -464,11 +485,51 @@ fun SaveDetailModal(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Secondary Actions Row: ZIP & Delete
+            // Secondary Actions Row: Share & ZIP & Delete
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                if (onShareSave != null) {
+                    var shareMenuExpanded by remember { mutableStateOf(false) }
+                    Box(modifier = Modifier.weight(1f)) {
+                        FilledTonalButton(
+                            onClick = { shareMenuExpanded = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Share, null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Share", style = MaterialTheme.typography.labelMedium)
+                        }
+
+                        DropdownMenu(
+                            expanded = shareMenuExpanded,
+                            onDismissRequest = { shareMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Share as PSU (.psu)") },
+                                leadingIcon = { Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp)) },
+                                onClick = {
+                                    shareMenuExpanded = false
+                                    onShareSave("psu")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share as ZIP (.zip)") },
+                                leadingIcon = { Icon(Icons.Default.FolderZip, null, modifier = Modifier.size(18.dp)) },
+                                onClick = {
+                                    shareMenuExpanded = false
+                                    onShareSave("zip")
+                                }
+                            )
+                        }
+                    }
+                }
+
                 FilledTonalButton(
                     onClick = onExportZip,
                     modifier = Modifier
@@ -478,8 +539,8 @@ fun SaveDetailModal(
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                 ) {
                     Icon(Icons.Default.FolderZip, null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("ZIP Archive", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("ZIP", style = MaterialTheme.typography.labelMedium)
                 }
 
                 OutlinedButton(
@@ -492,8 +553,8 @@ fun SaveDetailModal(
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                 ) {
                     Icon(Icons.Default.Delete, null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Delete Save", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Delete", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

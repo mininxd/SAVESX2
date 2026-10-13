@@ -41,6 +41,10 @@
   - **Action Replay MAX**: Unpack and import compressed `.max` savegame containers.
   - **CodeBreaker**: Unpack and import `.cbs` savegame archives.
   - **ZIP Archives**: Export save folders as `.zip` packages for easy backup and sharing.
+- **Android System Share Sheet**: Share single or multi-selected saves (.psu / .zip) directly to external apps (Discord, Telegram, Cloud Storage, Email) without manual disk export.
+- **Savegame Checksum Fixer & Verification**:
+  - Auto-detection and 1-tap repair for Grand Theft Auto series (`GTA III`, `Vice City`, `San Andreas`, `Liberty City Stories`, `Vice City Stories`).
+  - Integrated Checksum Inspector & Custom Injector (CRC-32, Sum32 LE/BE, Sum16 LE/BE, Adler-32, MD5, SHA-1) in both the Save Details inspector and Hex Viewer.
 - **Save File Inspection**: View full directory listings, individual file sizes, creation/modification timestamps, and copy protection flags.
 - **Save Deletion & Slot Defragmentation**: Safely remove save directories with full cluster chain deallocation and parent directory slot re-indexing.
 
@@ -50,7 +54,7 @@
 - **`icon.sys` Inspector**: View 3D icon filenames, lighting direction vectors, ambient colors, and copy-protection attributes.
 - **Diagnostics & Hex Viewer**:
   - Detailed card diagnostic modal showing superblock version, cluster allocation statistics, and bad block status.
-  - Built-in hex viewer to inspect any raw file or sector.
+  - Built-in hex viewer with integrated checksum calculator and undoable byte patching to inspect any raw file or sector.
 
 ### 📱 Modern Android UI
 - **Material You (Material 3)**: Dynamic color theming on Android 12+ (SDK 31+) with retro PlayStation deep blue & cyan accents on Android 8–11.
