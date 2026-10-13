@@ -25,17 +25,30 @@ data class Ps2Save(
     val iconSys: Ps2IconSys? = null,
     val iconBitmap: Bitmap? = null,
     val iconImageBitmap: ImageBitmap? = iconBitmap?.asImageBitmap(),
-    val region: Ps2Region = Ps2Region.detect(directoryName, title)
+    val gameInfo: Ps2GameInfo? = Ps2SerialDatabase.lookupGame(directoryName),
+    val region: Ps2Region = gameInfo?.region ?: Ps2Region.detect(directoryName, title)
 ) {
     val sizeInKb: Long = (sizeInBytes + 1023) / 1024
     val sizeInMb: Double = sizeInBytes / (1024.0 * 1024.0)
 
-    val displayTitle: String = title.ifBlank { directoryName }
-    val displaySubtitle: String = subtitle
+    val canonicalGameTitle: String? = gameInfo?.title
 
-    val fullDisplayTitle: String = if (subtitle.isNotBlank()) "$displayTitle • $subtitle" else displayTitle
+    val displayTitle: String = when {
+        canonicalGameTitle != null && (title.isBlank() || title.equals(directoryName, ignoreCase = true) || Ps2SerialDatabase.isRawSerialTitle(title)) -> canonicalGameTitle
+        title.isNotBlank() -> title
+        canonicalGameTitle != null -> canonicalGameTitle
+        else -> directoryName
+    }
+
+    val displaySubtitle: String = when {
+        subtitle.isNotBlank() -> subtitle
+        canonicalGameTitle != null && title.isNotBlank() && !title.equals(canonicalGameTitle, ignoreCase = true) && !title.equals(directoryName, ignoreCase = true) -> title
+        else -> ""
+    }
+
+    val fullDisplayTitle: String = if (displaySubtitle.isNotBlank()) "$displayTitle • $displaySubtitle" else displayTitle
     val modifiedDateOnly: String = modifiedDate.substringBefore(' ')
-    val searchKey: String = "${displayTitle.lowercase()} ${directoryName.lowercase()} ${subtitle.lowercase()} ${region.code.lowercase()} ${region.displayName.lowercase()}"
+    val searchKey: String = "${displayTitle.lowercase()} ${directoryName.lowercase()} ${subtitle.lowercase()} ${canonicalGameTitle?.lowercase() ?: ""} ${gameInfo?.serial?.lowercase() ?: ""} ${region.code.lowercase()} ${region.displayName.lowercase()}"
     val sizeText: String = "$sizeInKb KB"
     val firstInitial: String = (displayTitle.firstOrNull() ?: 'P').uppercase()
 

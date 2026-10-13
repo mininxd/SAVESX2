@@ -180,6 +180,16 @@ fun SaveDetailModal(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                    if (save.gameInfo != null) {
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            text = if (save.gameInfo.publisher != null) "${save.gameInfo.serial} • ${save.gameInfo.publisher}" else save.gameInfo.serial,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

@@ -14,6 +14,8 @@ import xyz.savesx2.core.Ps2Timestamp
 import xyz.savesx2.core.PsuHandler
 import xyz.savesx2.core.ChecksumAlgorithm
 import xyz.savesx2.core.Ps2ChecksumFixer
+import xyz.savesx2.core.Ps2Region
+import xyz.savesx2.core.Ps2SerialDatabase
 import xyz.savesx2.core.RecentCard
 import java.io.File
 import org.junit.Assert.assertArrayEquals
@@ -1081,6 +1083,36 @@ class Ps2MemcardTest {
         val writtenCrc = Ps2ChecksumFixer.readUInt32LE(patched, 60)
         val expectedCrc = Ps2ChecksumFixer.calculateCrc32(patched, 0, 60)
         assertEquals(expectedCrc, writtenCrc)
+    }
+
+    @Test
+    fun testSerialDatabaseLookup() {
+        // Serial normalization
+        assertEquals("SLUS-21445", Ps2SerialDatabase.extractSerial("BASLUS-21445FFXII01"))
+        assertEquals("SLES-52541", Ps2SerialDatabase.extractSerial("BESLES-52541GTA50000"))
+        assertEquals("SLPS-25088", Ps2SerialDatabase.extractSerial("BISLPS-25088"))
+
+        // Lookup games
+        val ffx = Ps2SerialDatabase.lookupGame("BASLUS-20268")
+        assertNotNull(ffx)
+        assertEquals("Final Fantasy X", ffx!!.title)
+        assertEquals(Ps2Region.US, ffx.region)
+        assertEquals("Square Enix", ffx.publisher)
+
+        val gtaSaPal = Ps2SerialDatabase.lookupGame("BESLES-52541")
+        assertNotNull(gtaSaPal)
+        assertEquals("Grand Theft Auto: San Andreas", gtaSaPal!!.title)
+        assertEquals(Ps2Region.EU, gtaSaPal.region)
+
+        val ffxiiJp = Ps2SerialDatabase.lookupGame("BISLPS-25630")
+        assertNotNull(ffxiiJp)
+        assertEquals("Final Fantasy XII", ffxiiJp!!.title)
+        assertEquals(Ps2Region.JP, ffxiiJp.region)
+
+        // Raw serial check
+        assertTrue(Ps2SerialDatabase.isRawSerialTitle("BASLUS-21445"))
+        assertTrue(Ps2SerialDatabase.isRawSerialTitle("SLUS-20268"))
+        assertFalse(Ps2SerialDatabase.isRawSerialTitle("Final Fantasy X"))
     }
 }
 

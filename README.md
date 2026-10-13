@@ -42,6 +42,9 @@
   - **CodeBreaker**: Unpack and import `.cbs` savegame archives.
   - **ZIP Archives**: Export save folders as `.zip` packages for easy backup and sharing.
 - **Android System Share Sheet**: Share single or multi-selected saves (.psu / .zip) directly to external apps (Discord, Telegram, Cloud Storage, Email) without manual disk export.
+- **Offline PS2 Game Serial Database & Titles**:
+  - Built-in offline mapping table identifying hundreds of PlayStation 2 disc serials (`SLUS`, `SCUS`, `SLES`, `SCES`, `SLPS`, `SLPM`).
+  - Automatically resolves canonical game titles and publishers when save titles are blank, unparsed, or raw serial codes.
 - **Savegame Checksum Fixer & Verification**:
   - Auto-detection and 1-tap repair for Grand Theft Auto series (`GTA III`, `Vice City`, `San Andreas`, `Liberty City Stories`, `Vice City Stories`).
   - Integrated Checksum Inspector & Custom Injector (CRC-32, Sum32 LE/BE, Sum16 LE/BE, Adler-32, MD5, SHA-1) in both the Save Details inspector and Hex Viewer.
