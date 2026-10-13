@@ -58,6 +58,7 @@ import androidx.core.app.ActivityCompat
 import xyz.savesx2.core.BatchExportFormat
 import xyz.savesx2.core.ExportFilenameFormat
 import xyz.savesx2.core.MemcardFormatter
+import xyz.savesx2.core.Ps1Memcard
 import xyz.savesx2.core.Ps2Save
 import xyz.savesx2.core.FolderMemcardHandler
 import xyz.savesx2.core.RecentCard

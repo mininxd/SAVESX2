@@ -445,6 +445,7 @@ class MemcardViewModel : ViewModel() {
                     lastOpened = System.currentTimeMillis(),
                     isFolder = current.isFolderCard
                 )
+            )
         }
     }
 

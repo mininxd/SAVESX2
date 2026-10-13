@@ -351,7 +351,7 @@ class Ps1Memcard private constructor(
                     length = actualSize,
                     created = Ps2Timestamp(),
                     cluster = slot.toLong(),
-                    dirCluster = 0L,
+                    dirEntry = 0L,
                     modified = Ps2Timestamp(),
                     attr = 0,
                     name = idString

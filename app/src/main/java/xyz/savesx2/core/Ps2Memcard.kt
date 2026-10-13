@@ -1110,7 +1110,7 @@ class Ps2Memcard private constructor(
                 length = payload.size.toLong(),
                 created = Ps2Timestamp.now(),
                 cluster = 0,
-                dirCluster = rootCluster,
+                dirEntry = rootCluster,
                 modified = Ps2Timestamp.now(),
                 attr = 0,
                 name = saveName
@@ -1132,7 +1132,7 @@ class Ps2Memcard private constructor(
                 length = saveData.size.toLong(),
                 created = Ps2Timestamp.now(),
                 cluster = 0,
-                dirCluster = rootCluster,
+                dirEntry = rootCluster,
                 modified = Ps2Timestamp.now(),
                 attr = 0,
                 name = saveName
