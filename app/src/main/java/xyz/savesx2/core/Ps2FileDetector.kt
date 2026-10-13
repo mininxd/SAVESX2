@@ -11,13 +11,16 @@ import java.io.File
 enum class Ps2FileType {
     PS2_MEMCARD_IMAGE,       // Standard raw / ECC .ps2, .mcd, .raw, .mc2, .vmc memory card image
     PS2_FOLDER_MEMCARD,      // PCSX2 Folder memory card (via _pcsx2_superblock or directory)
+    PS1_MEMCARD_IMAGE,       // PlayStation 1 Memory Card (.mcr, .mcd, .srm, .vmp, .mc, raw 128KB)
     SAVEGAME_PSU,            // EMS / mymc .psu save archive
     SAVEGAME_MAX,            // Datel Action Replay MAX (.max)
     SAVEGAME_CBS,            // Pelican CodeBreaker (.cbs)
     SAVEGAME_XPS,            // Datel SharkPort / X-Port (.xps)
     SAVEGAME_FOLDER,         // A save directory containing save files (e.g. icon.sys)
     SAVEGAME_ZIP,            // PS2 savegame in a ZIP archive (.zip)
-    INVALID                  // Not a recognized PS2 file or savegame
+    SAVEGAME_MCS,            // PS1 single savegame (.mcs)
+    SAVEGAME_PSX,            // PS1 raw single savegame (.psx)
+    INVALID                  // Not a recognized PS2/PS1 file or savegame
 }
 
 /**
@@ -31,7 +34,9 @@ data class DetectionResult(
     val isValid: Boolean = fileType != Ps2FileType.INVALID
 ) {
     val isMemcard: Boolean
-        get() = fileType == Ps2FileType.PS2_MEMCARD_IMAGE || fileType == Ps2FileType.PS2_FOLDER_MEMCARD
+        get() = fileType == Ps2FileType.PS2_MEMCARD_IMAGE ||
+                fileType == Ps2FileType.PS2_FOLDER_MEMCARD ||
+                fileType == Ps2FileType.PS1_MEMCARD_IMAGE
 
     val isSavegame: Boolean
         get() = fileType == Ps2FileType.SAVEGAME_PSU ||
@@ -39,7 +44,14 @@ data class DetectionResult(
                 fileType == Ps2FileType.SAVEGAME_CBS ||
                 fileType == Ps2FileType.SAVEGAME_XPS ||
                 fileType == Ps2FileType.SAVEGAME_FOLDER ||
-                fileType == Ps2FileType.SAVEGAME_ZIP
+                fileType == Ps2FileType.SAVEGAME_ZIP ||
+                fileType == Ps2FileType.SAVEGAME_MCS ||
+                fileType == Ps2FileType.SAVEGAME_PSX
+
+    val isPs1: Boolean
+        get() = fileType == Ps2FileType.PS1_MEMCARD_IMAGE ||
+                fileType == Ps2FileType.SAVEGAME_MCS ||
+                fileType == Ps2FileType.SAVEGAME_PSX
 }
 
 /**
@@ -58,12 +70,23 @@ object Ps2FileDetector {
             return Ps2FileType.PS2_FOLDER_MEMCARD
         }
 
-        // 2. Check for standard PS2 memory card image (.ps2, .raw, etc.)
+        // 2. Check for PlayStation 1 Memory Card (.mcr, .mcd, .srm, .vmp, raw 128KB)
+        if (Ps1Memcard.isPs1Memcard(data, fileName)) {
+            return Ps2FileType.PS1_MEMCARD_IMAGE
+        }
+
+        // 3. Check for standard PS2 memory card image (.ps2, .raw, etc.)
         if (isMemcardImageData(data, nameLower)) {
             return Ps2FileType.PS2_MEMCARD_IMAGE
         }
 
-        // 3. Check for savegame formats
+        // 4. Check for savegame formats
+        if (Ps1Memcard.isMcsSave(data, fileName)) {
+            return Ps2FileType.SAVEGAME_MCS
+        }
+        if (Ps1Memcard.isPsxSave(data, fileName)) {
+            return Ps2FileType.SAVEGAME_PSX
+        }
         if (MaxHandler.isMax(data)) {
             return Ps2FileType.SAVEGAME_MAX
         }
@@ -153,13 +176,16 @@ object Ps2FileDetector {
         val desc = when (type) {
             Ps2FileType.PS2_MEMCARD_IMAGE -> "PS2 Memory Card Image (${file.name})"
             Ps2FileType.PS2_FOLDER_MEMCARD -> "PCSX2 Folder Memory Card (${file.parentFile?.name ?: file.name})"
+            Ps2FileType.PS1_MEMCARD_IMAGE -> "PlayStation 1 Memory Card (${file.name})"
             Ps2FileType.SAVEGAME_PSU -> "PSU Savegame Archive (${file.name})"
             Ps2FileType.SAVEGAME_MAX -> "Action Replay MAX Savegame (${file.name})"
             Ps2FileType.SAVEGAME_CBS -> "CodeBreaker Savegame (${file.name})"
             Ps2FileType.SAVEGAME_XPS -> "SharkPort / X-Port Savegame (${file.name})"
             Ps2FileType.SAVEGAME_FOLDER -> "PS2 Savegame Folder (${file.name})"
             Ps2FileType.SAVEGAME_ZIP -> "PS2 ZIP Savegame Archive (${file.name})"
-            Ps2FileType.INVALID -> "Not a valid PS2 memory card or savegame file"
+            Ps2FileType.SAVEGAME_MCS -> "PlayStation 1 Savegame (.mcs) (${file.name})"
+            Ps2FileType.SAVEGAME_PSX -> "PlayStation 1 Raw Savegame (.psx) (${file.name})"
+            Ps2FileType.INVALID -> "Not a valid PS2 or PS1 memory card / savegame file"
         }
 
         return DetectionResult(
@@ -204,13 +230,16 @@ object Ps2FileDetector {
         val desc = when (type) {
             Ps2FileType.PS2_MEMCARD_IMAGE -> "PS2 Memory Card Image ($effectiveName)"
             Ps2FileType.PS2_FOLDER_MEMCARD -> "PCSX2 Folder Memory Card ($effectiveName)"
+            Ps2FileType.PS1_MEMCARD_IMAGE -> "PlayStation 1 Memory Card ($effectiveName)"
             Ps2FileType.SAVEGAME_PSU -> "PSU Savegame Archive ($effectiveName)"
             Ps2FileType.SAVEGAME_MAX -> "Action Replay MAX Savegame ($effectiveName)"
             Ps2FileType.SAVEGAME_CBS -> "CodeBreaker Savegame ($effectiveName)"
             Ps2FileType.SAVEGAME_XPS -> "SharkPort / X-Port Savegame ($effectiveName)"
             Ps2FileType.SAVEGAME_FOLDER -> "PS2 Savegame Folder ($effectiveName)"
             Ps2FileType.SAVEGAME_ZIP -> "PS2 ZIP Savegame Archive ($effectiveName)"
-            Ps2FileType.INVALID -> "Not a valid PS2 memory card or savegame file"
+            Ps2FileType.SAVEGAME_MCS -> "PlayStation 1 Savegame (.mcs) ($effectiveName)"
+            Ps2FileType.SAVEGAME_PSX -> "PlayStation 1 Raw Savegame (.psx) ($effectiveName)"
+            Ps2FileType.INVALID -> "Not a valid PS2 or PS1 memory card / savegame file"
         }
 
         return DetectionResult(

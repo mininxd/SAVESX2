@@ -58,7 +58,7 @@ object Ps2SerialDatabase {
     }
 
     // --- Embedded Database ---
-    private val DATABASE: Map<String, Ps2GameInfo> = buildMap(1200) {
+    private val DATABASE: Map<String, Ps2GameInfo> = buildMap(1600) {
         fun add(serial: String, title: String, region: Ps2Region, publisher: String? = null) {
             put(serial.uppercase(Locale.US), Ps2GameInfo(serial.uppercase(Locale.US), title, region, publisher))
         }
@@ -530,5 +530,174 @@ object Ps2SerialDatabase {
 
         add("SLPM-66020", "World Soccer Winning Eleven 9", Ps2Region.JP, "Konami")
         add("SLPM-66370", "World Soccer Winning Eleven 10", Ps2Region.JP, "Konami")
+
+        // ==================== PLAYSTATION 1 (PS1) CLASSICS ====================
+        // Final Fantasy Series (PS1)
+        add("SCUS-94163", "Final Fantasy VII", Ps2Region.US, "Square")
+        add("SCES-00867", "Final Fantasy VII", Ps2Region.EU, "Square")
+        add("SCES-00868", "Final Fantasy VII (German)", Ps2Region.EU, "Square")
+        add("SCES-00869", "Final Fantasy VII (French)", Ps2Region.EU, "Square")
+        add("SCES-00900", "Final Fantasy VII (Spanish)", Ps2Region.EU, "Square")
+        add("SLPS-00700", "Final Fantasy VII", Ps2Region.JP, "Square")
+        add("SLPS-01057", "Final Fantasy VII International", Ps2Region.JP, "Square")
+
+        add("SLUS-00892", "Final Fantasy VIII", Ps2Region.US, "Square")
+        add("SLES-02080", "Final Fantasy VIII", Ps2Region.EU, "Square")
+        add("SLPS-01880", "Final Fantasy VIII", Ps2Region.JP, "Square")
+
+        add("SLUS-01251", "Final Fantasy IX", Ps2Region.US, "Square")
+        add("SLES-02965", "Final Fantasy IX", Ps2Region.EU, "Square")
+        add("SLPS-02000", "Final Fantasy IX", Ps2Region.JP, "Square")
+
+        add("SCUS-94221", "Final Fantasy Tactics", Ps2Region.US, "Square")
+        add("SLPS-00770", "Final Fantasy Tactics", Ps2Region.JP, "Square")
+
+        // Metal Gear Solid Series (PS1)
+        add("SLUS-00844", "Metal Gear Solid", Ps2Region.US, "Konami")
+        add("SLUS-00957", "Metal Gear Solid: VR Missions", Ps2Region.US, "Konami")
+        add("SLES-01507", "Metal Gear Solid", Ps2Region.EU, "Konami")
+        add("SLPS-01500", "Metal Gear Solid", Ps2Region.JP, "Konami")
+        add("SLPS-02170", "Metal Gear Solid: Integral", Ps2Region.JP, "Konami")
+
+        // Resident Evil Series (PS1)
+        add("SLUS-00170", "Resident Evil", Ps2Region.US, "Capcom")
+        add("SLUS-00551", "Resident Evil: Director's Cut", Ps2Region.US, "Capcom")
+        add("SLES-00200", "Resident Evil", Ps2Region.EU, "Capcom")
+        add("SLPS-00222", "Biohazard", Ps2Region.JP, "Capcom")
+
+        add("SLUS-00748", "Resident Evil 2 (DualShock)", Ps2Region.US, "Capcom")
+        add("SLUS-00421", "Resident Evil 2", Ps2Region.US, "Capcom")
+        add("SLES-00972", "Resident Evil 2", Ps2Region.EU, "Capcom")
+        add("SLPS-01222", "Biohazard 2", Ps2Region.JP, "Capcom")
+
+        add("SLUS-00923", "Resident Evil 3: Nemesis", Ps2Region.US, "Capcom")
+        add("SLES-02539", "Resident Evil 3: Nemesis", Ps2Region.EU, "Capcom")
+        add("SLPS-02300", "Biohazard 3: Last Escape", Ps2Region.JP, "Capcom")
+
+        // Castlevania, Silent Hill & Horror (PS1)
+        add("SLUS-00067", "Castlevania: Symphony of the Night", Ps2Region.US, "Konami")
+        add("SLES-00524", "Castlevania: Symphony of the Night", Ps2Region.EU, "Konami")
+        add("SLPM-86023", "Akumajou Dracula X: Gekka no Yasoukyoku", Ps2Region.JP, "Konami")
+
+        add("SLUS-00972", "Silent Hill", Ps2Region.US, "Konami")
+        add("SLES-01514", "Silent Hill", Ps2Region.EU, "Konami")
+        add("SLPM-86192", "Silent Hill", Ps2Region.JP, "Konami")
+
+        add("SLUS-00922", "Dino Crisis", Ps2Region.US, "Capcom")
+        add("SLES-02207", "Dino Crisis", Ps2Region.EU, "Capcom")
+        add("SLUS-01279", "Dino Crisis 2", Ps2Region.US, "Capcom")
+        add("SLES-03221", "Dino Crisis 2", Ps2Region.EU, "Capcom")
+
+        add("SLUS-00662", "Parasite Eve", Ps2Region.US, "Square")
+        add("SLPS-01303", "Parasite Eve", Ps2Region.JP, "Square")
+        add("SLUS-01042", "Parasite Eve II", Ps2Region.US, "Square")
+        add("SLES-02558", "Parasite Eve II", Ps2Region.EU, "Square")
+
+        // Crash Bandicoot & Spyro Series (PS1)
+        add("SCUS-94900", "Crash Bandicoot", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-00344", "Crash Bandicoot", Ps2Region.EU, "Sony Computer Entertainment")
+        add("SCPS-10031", "Crash Bandicoot", Ps2Region.JP, "Sony Computer Entertainment")
+
+        add("SCUS-94154", "Crash Bandicoot 2: Cortex Strikes Back", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-00967", "Crash Bandicoot 2: Cortex Strikes Back", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94244", "Crash Bandicoot 3: Warped", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-01420", "Crash Bandicoot 3: Warped", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94394", "Crash Team Racing", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-02105", "Crash Team Racing", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94228", "Spyro the Dragon", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-01438", "Spyro the Dragon", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94425", "Spyro 2: Ripto's Rage!", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-02104", "Spyro 2: Gateway to Glimmer", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94463", "Spyro: Year of the Dragon", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-02835", "Spyro: Year of the Dragon", Ps2Region.EU, "Sony Computer Entertainment")
+
+        // Tekken Series (PS1)
+        add("SLUS-00402", "Tekken 3", Ps2Region.US, "Namco")
+        add("SCES-01237", "Tekken 3", Ps2Region.EU, "Namco")
+        add("SLPS-01300", "Tekken 3", Ps2Region.JP, "Namco")
+
+        add("SLUS-00213", "Tekken 2", Ps2Region.US, "Namco")
+        add("SCES-00255", "Tekken 2", Ps2Region.EU, "Namco")
+        add("SLPS-00300", "Tekken 2", Ps2Region.JP, "Namco")
+
+        // Gran Turismo Series (PS1)
+        add("SCUS-94194", "Gran Turismo", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-00984", "Gran Turismo", Ps2Region.EU, "Sony Computer Entertainment")
+        add("SCPS-10045", "Gran Turismo", Ps2Region.JP, "Sony Computer Entertainment")
+
+        add("SCUS-94455", "Gran Turismo 2", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-02380", "Gran Turismo 2", Ps2Region.EU, "Sony Computer Entertainment")
+        add("SCPS-10116", "Gran Turismo 2", Ps2Region.JP, "Sony Computer Entertainment")
+
+        // RPGs & Classics (PS1)
+        add("SLUS-00664", "Xenogears", Ps2Region.US, "Square")
+        add("SLPS-01160", "Xenogears", Ps2Region.JP, "Square")
+
+        add("SLUS-01041", "Chrono Cross", Ps2Region.US, "Square")
+        add("SLPS-02364", "Chrono Cross", Ps2Region.JP, "Square")
+
+        add("SLUS-01363", "Chrono Trigger (Final Fantasy Chronicles)", Ps2Region.US, "Square")
+
+        add("SLUS-01040", "Vagrant Story", Ps2Region.US, "Square")
+        add("SLES-02755", "Vagrant Story", Ps2Region.EU, "Square")
+        add("SLPS-02500", "Vagrant Story", Ps2Region.JP, "Square")
+
+        add("SLUS-00292", "Suikoden", Ps2Region.US, "Konami")
+        add("SLES-00527", "Suikoden", Ps2Region.EU, "Konami")
+
+        add("SLUS-00958", "Suikoden II", Ps2Region.US, "Konami")
+        add("SLES-02442", "Suikoden II", Ps2Region.EU, "Konami")
+
+        add("SLUS-01066", "Tony Hawk's Pro Skater 2", Ps2Region.US, "Activision")
+        add("SLES-02908", "Tony Hawk's Pro Skater 2", Ps2Region.EU, "Activision")
+
+        add("SLUS-00152", "Tomb Raider", Ps2Region.US, "Eidos Interactive")
+        add("SLES-00024", "Tomb Raider", Ps2Region.EU, "Eidos Interactive")
+
+        add("SLUS-00437", "Tomb Raider II", Ps2Region.US, "Eidos Interactive")
+        add("SLES-00718", "Tomb Raider II", Ps2Region.EU, "Eidos Interactive")
+
+        add("SCUS-94304", "Twisted Metal 2", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-00511", "Twisted Metal 2", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94240", "Syphon Filter", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-01910", "Syphon Filter", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94457", "Syphon Filter 2", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-02688", "Syphon Filter 2", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94241", "Ape Escape", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-01564", "Ape Escape", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SCUS-94227", "MediEvil", Ps2Region.US, "Sony Computer Entertainment")
+        add("SCES-00311", "MediEvil", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SLUS-00889", "Legacy of Kain: Soul Reaver", Ps2Region.US, "Eidos Interactive")
+        add("SLES-01301", "Legacy of Kain: Soul Reaver", Ps2Region.EU, "Eidos Interactive")
+
+        add("SCUS-94204", "Klonoa: Door to Phantomile", Ps2Region.US, "Namco")
+        add("SCES-01063", "Klonoa: Door to Phantomile", Ps2Region.EU, "Namco")
+
+        add("SLUS-00005", "Rayman", Ps2Region.US, "Ubisoft")
+        add("SLES-00049", "Rayman", Ps2Region.EU, "Ubisoft")
+
+        add("SLUS-00422", "Breath of Fire III", Ps2Region.US, "Capcom")
+        add("SLES-01304", "Breath of Fire III", Ps2Region.EU, "Capcom")
+
+        add("SLUS-01324", "Breath of Fire IV", Ps2Region.US, "Capcom")
+        add("SLES-03552", "Breath of Fire IV", Ps2Region.EU, "Capcom")
+
+        add("SLUS-00840", "Star Ocean: The Second Story", Ps2Region.US, "Sony Computer Entertainment")
+        add("SLES-02585", "Star Ocean: The Second Story", Ps2Region.EU, "Sony Computer Entertainment")
+
+        add("SLUS-00628", "Lunar: Silver Star Story Complete", Ps2Region.US, "Working Designs")
+        add("SLUS-01156", "Valkyrie Profile", Ps2Region.US, "Enix")
+        add("SLUS-00561", "Mega Man X4", Ps2Region.US, "Capcom")
+        add("SCUS-94183", "PaRappa the Rapper", Ps2Region.US, "Sony Computer Entertainment")
     }
 }

@@ -24,5 +24,15 @@ enum class BatchExportFormat(
         extension = "xps",
         title = "XPS (.xps)",
         description = "SharkPort / X-Port format"
+    ),
+    MCS(
+        extension = "mcs",
+        title = "MCS (.mcs)",
+        description = "PlayStation 1 single save container"
+    ),
+    PSX(
+        extension = "psx",
+        title = "PSX (.psx)",
+        description = "PlayStation 1 raw savegame payload"
     )
 }

@@ -77,6 +77,8 @@ fun SaveDetailModal(
     onExportMax: () -> Unit = {},
     onExportCbs: () -> Unit = {},
     onExportXps: () -> Unit = {},
+    onExportMcs: () -> Unit = {},
+    onExportPsx: () -> Unit = {},
     onExportZip: () -> Unit,
     onDelete: () -> Unit,
     onToggleProtection: (Boolean) -> Unit = {},
@@ -218,117 +220,145 @@ fun SaveDetailModal(
                 )
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    // Copy Protection Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    if (save.isPsx) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = if (save.isProtected) Icons.Default.Lock else Icons.Default.LockOpen,
+                                imageVector = Icons.Default.Info,
                                 contentDescription = null,
-                                tint = if (save.isProtected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = if (save.isProtected) "Copy-Protected" else "Copy Allowed",
+                                    text = "PlayStation 1 Savegame",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (save.isProtected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (save.isProtected) "PS2 BIOS copy restriction active" else "Can be copied between memory cards",
+                                    text = "Allocated slot frames: ${maxOf(1, save.sizeInKb / 8)} (8 KB per frame)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
                         }
-                        var lastToggleTime by remember { mutableLongStateOf(0L) }
-                        Switch(
-                            checked = save.isProtected,
-                            onCheckedChange = { isProtected ->
-                                val now = System.currentTimeMillis()
-                                if (now - lastToggleTime >= 250L) {
-                                    lastToggleTime = now
-                                    onToggleProtection(isProtected)
-                                }
-                            },
-                            modifier = Modifier.scale(0.8f)
-                        )
-                    }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 6.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                    )
-
-                    // Timestamps Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    } else {
+                        // Copy Protection Row
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = if (save.isProtected) Icons.Default.Lock else Icons.Default.LockOpen,
+                                    contentDescription = null,
+                                    tint = if (save.isProtected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
                                     Text(
-                                        text = "Modified: ",
+                                        text = if (save.isProtected) "Copy-Protected" else "Copy Allowed",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (save.isProtected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = if (save.isProtected) "PS2 BIOS copy restriction active" else "Can be copied between memory cards",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )
-                                    Text(
-                                        text = save.modifiedDate.ifBlank { "N/A" },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Medium
-                                    )
                                 }
-                                if (save.createdDate.isNotBlank()) {
-                                    Spacer(modifier = Modifier.height(1.dp))
+                            }
+                            var lastToggleTime by remember { mutableLongStateOf(0L) }
+                            Switch(
+                                checked = save.isProtected,
+                                onCheckedChange = { isProtected ->
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastToggleTime >= 250L) {
+                                        lastToggleTime = now
+                                        onToggleProtection(isProtected)
+                                    }
+                                },
+                                modifier = Modifier.scale(0.8f)
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                        )
+
+                        // Timestamps Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "Created: ",
+                                            text = "Modified: ",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.outline
                                         )
                                         Text(
-                                            text = save.createdDate,
+                                            text = save.modifiedDate.ifBlank { "N/A" },
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
+                                            fontWeight = FontWeight.Medium
                                         )
+                                    }
+                                    if (save.createdDate.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(1.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Created: ",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                            Text(
+                                                text = save.createdDate,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        FilledTonalButton(
-                            onClick = onEditTimestamps,
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Edit", style = MaterialTheme.typography.labelSmall)
+                            FilledTonalButton(
+                                onClick = onEditTimestamps,
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
@@ -436,60 +466,93 @@ fun SaveDetailModal(
             Spacer(modifier = Modifier.height(5.dp))
 
             // Console Formats Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                FilledTonalButton(
-                    onClick = onExportPsu,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(34.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+            if (save.isPsx) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("PSU", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                }
+                    FilledTonalButton(
+                        onClick = onExportMcs,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("MCS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
 
-                FilledTonalButton(
-                    onClick = onExportMax,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(34.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
-                ) {
-                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("MAX", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    FilledTonalButton(
+                        onClick = onExportPsx,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("PSX", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
                 }
-
-                FilledTonalButton(
-                    onClick = onExportCbs,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(34.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("CBS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                }
+                    FilledTonalButton(
+                        onClick = onExportPsu,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("PSU", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
 
-                FilledTonalButton(
-                    onClick = onExportXps,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(34.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
-                ) {
-                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("XPS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    FilledTonalButton(
+                        onClick = onExportMax,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("MAX", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+
+                    FilledTonalButton(
+                        onClick = onExportCbs,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("CBS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+
+                    FilledTonalButton(
+                        onClick = onExportXps,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(34.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("XPS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
@@ -520,14 +583,33 @@ fun SaveDetailModal(
                             expanded = shareMenuExpanded,
                             onDismissRequest = { shareMenuExpanded = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Share as PSU (.psu)") },
-                                leadingIcon = { Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp)) },
-                                onClick = {
-                                    shareMenuExpanded = false
-                                    onShareSave("psu")
-                                }
-                            )
+                            if (save.isPsx) {
+                                DropdownMenuItem(
+                                    text = { Text("Share as MCS (.mcs)") },
+                                    leadingIcon = { Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp)) },
+                                    onClick = {
+                                        shareMenuExpanded = false
+                                        onShareSave("mcs")
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Share as PSX (.psx)") },
+                                    leadingIcon = { Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp)) },
+                                    onClick = {
+                                        shareMenuExpanded = false
+                                        onShareSave("psx")
+                                    }
+                                )
+                            } else {
+                                DropdownMenuItem(
+                                    text = { Text("Share as PSU (.psu)") },
+                                    leadingIcon = { Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp)) },
+                                    onClick = {
+                                        shareMenuExpanded = false
+                                        onShareSave("psu")
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Share as ZIP (.zip)") },
                                 leadingIcon = { Icon(Icons.Default.FolderZip, null, modifier = Modifier.size(18.dp)) },

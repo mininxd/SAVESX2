@@ -1097,6 +1097,55 @@ class Ps2Memcard private constructor(
      */
     fun importSave(saveData: ByteArray, defaultSaveName: String? = null): Boolean {
         if (!isFormatted) return false
+
+        // Check for PS1 single save formats (.mcs, .psx)
+        if (Ps1Memcard.isMcsSave(saveData, defaultSaveName)) {
+            val nameFromHeader = String(saveData.copyOfRange(10, 74), Charsets.US_ASCII).trim().trimEnd('\u0000').ifBlank { null }
+            val saveName = nameFromHeader ?: defaultSaveName?.ifBlank { "PS1_SAVE" } ?: "PS1_SAVE"
+            val payload = saveData.copyOfRange(128, saveData.size)
+            deleteSave(saveName)
+            val rootCluster = if (superBlock.rootdirCluster >= allocOffset) superBlock.rootdirCluster - allocOffset else superBlock.rootdirCluster
+            val entryTemplate = Ps2DirectoryEntry(
+                mode = Ps2DirectoryEntry.DF_FILE or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_PSX or Ps2DirectoryEntry.DF_0400,
+                length = payload.size.toLong(),
+                created = Ps2Timestamp.now(),
+                cluster = 0,
+                dirCluster = rootCluster,
+                modified = Ps2Timestamp.now(),
+                attr = 0,
+                name = saveName
+            )
+            val ok = writeFile(rootCluster, saveName, payload, entryTemplate, preserveExactMode = true)
+            if (ok) {
+                writeFatToCard()
+                invalidateSavesCache()
+                return true
+            }
+            return false
+        }
+        if (Ps1Memcard.isPsxSave(saveData, defaultSaveName)) {
+            val saveName = defaultSaveName?.ifBlank { "PS1_SAVE" } ?: "PS1_SAVE"
+            deleteSave(saveName)
+            val rootCluster = if (superBlock.rootdirCluster >= allocOffset) superBlock.rootdirCluster - allocOffset else superBlock.rootdirCluster
+            val entryTemplate = Ps2DirectoryEntry(
+                mode = Ps2DirectoryEntry.DF_FILE or Ps2DirectoryEntry.DF_EXISTS or Ps2DirectoryEntry.DF_RWX or Ps2DirectoryEntry.DF_PSX or Ps2DirectoryEntry.DF_0400,
+                length = saveData.size.toLong(),
+                created = Ps2Timestamp.now(),
+                cluster = 0,
+                dirCluster = rootCluster,
+                modified = Ps2Timestamp.now(),
+                attr = 0,
+                name = saveName
+            )
+            val ok = writeFile(rootCluster, saveName, saveData, entryTemplate, preserveExactMode = true)
+            if (ok) {
+                writeFatToCard()
+                invalidateSavesCache()
+                return true
+            }
+            return false
+        }
+
         val unpackedList: List<PsuHandler.UnpackedPsu> = when {
             MaxHandler.isMax(saveData) -> MaxHandler.unpackMax(saveData)?.let { listOf(it) } ?: emptyList()
             CbsHandler.isCbs(saveData) -> CbsHandler.unpackCbs(saveData)?.let { listOf(it) } ?: emptyList()
@@ -1286,6 +1335,43 @@ class Ps2Memcard private constructor(
     fun exportSaveAsZip(saveName: String): ByteArray? {
         if (!isFormatted) return null
         return ZipSaveHandler.exportZip(this, saveName)
+    }
+
+    /**
+     * Exports a PS1 save from this memory card as a PlayStation 1 single save container (.mcs).
+     */
+    fun exportSaveAsMcs(saveName: String): ByteArray? {
+        if (!isFormatted) return null
+        val save = listSaves().firstOrNull { it.directoryName == saveName } ?: return null
+        val payload = save.files.firstOrNull()?.let {
+            it.data ?: getSaveFileBytes(saveName, it.name)
+        } ?: return null
+
+        val dirBlock = ByteArray(128)
+        dirBlock[0] = Ps1Memcard.STATUS_IN_USE_FIRST
+        val size = payload.size
+        dirBlock[4] = (size and 0xFF).toByte()
+        dirBlock[5] = ((size shr 8) and 0xFF).toByte()
+        dirBlock[6] = ((size shr 16) and 0xFF).toByte()
+        dirBlock[7] = ((size shr 24) and 0xFF).toByte()
+        dirBlock[8] = 0xFF.toByte()
+        dirBlock[9] = 0xFF.toByte()
+        val nameBytes = saveName.toByteArray(Charsets.US_ASCII)
+        System.arraycopy(nameBytes, 0, dirBlock, 10, minOf(nameBytes.size, 64))
+        dirBlock[127] = Ps1Memcard.calculateBlockChecksum(dirBlock, 0)
+
+        return dirBlock + payload
+    }
+
+    /**
+     * Exports a PS1 save from this memory card as a raw PlayStation 1 savegame (.psx).
+     */
+    fun exportSaveAsPsx(saveName: String): ByteArray? {
+        if (!isFormatted) return null
+        val save = listSaves().firstOrNull { it.directoryName == saveName } ?: return null
+        return save.files.firstOrNull()?.let {
+            it.data ?: getSaveFileBytes(saveName, it.name)
+        }
     }
 
     /**

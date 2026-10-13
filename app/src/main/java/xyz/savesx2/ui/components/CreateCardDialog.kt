@@ -49,6 +49,7 @@ fun CreateCardDialog(
     onDismiss: () -> Unit,
     onSaveCard: (name: String, sizeInMB: Int, useEcc: Boolean, isFormatted: Boolean) -> Unit
 ) {
+    var isPs1Platform by remember { mutableStateOf(false) }
     var cardName by remember { mutableStateOf("mcd001.ps2") }
     var selectedSize by remember { mutableIntStateOf(8) }
     var isPreformatted by remember { mutableStateOf(false) } // Default: standard unformatted (matching PCSX2/armsx2)
@@ -71,19 +72,8 @@ fun CreateCardDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                OutlinedTextField(
-                    value = cardName,
-                    onValueChange = { cardName = it },
-                    label = { Text("Card Name / Filename") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
                 Text(
-                    text = "Capacity:",
+                    text = "Platform:",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -95,16 +85,66 @@ fun CreateCardDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    sizes.forEach { size ->
-                        FilterChip(
-                            selected = (selectedSize == size),
-                            onClick = { selectedSize = size },
-                            label = { Text("${size}MB") }
-                        )
-                    }
+                    FilterChip(
+                        selected = !isPs1Platform,
+                        onClick = {
+                            if (isPs1Platform) {
+                                isPs1Platform = false
+                                if (cardName == "memcard1.mcr") cardName = "mcd001.ps2"
+                            }
+                        },
+                        label = { Text("PlayStation 2") }
+                    )
+                    FilterChip(
+                        selected = isPs1Platform,
+                        onClick = {
+                            if (!isPs1Platform) {
+                                isPs1Platform = true
+                                if (cardName == "mcd001.ps2") cardName = "memcard1.mcr"
+                            }
+                        },
+                        label = { Text("PlayStation 1 (128 KB)") }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = cardName,
+                    onValueChange = { cardName = it },
+                    label = { Text("Card Name / Filename") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (!isPs1Platform) {
+                    Text(
+                        text = "Capacity:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        sizes.forEach { size ->
+                            FilterChip(
+                                selected = (selectedSize == size),
+                                onClick = { selectedSize = size },
+                                label = { Text("${size}MB") }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
 
                 Text(
                     text = "Card Creation Mode:",
@@ -122,7 +162,7 @@ fun CreateCardDialog(
                     FilterChip(
                         selected = !isPreformatted,
                         onClick = { isPreformatted = false },
-                        label = { Text("Unformatted (PCSX2/ARMSX2)") }
+                        label = { Text(if (isPs1Platform) "Unformatted (Raw)" else "Unformatted (PCSX2/ARMSX2)") }
                     )
                     FilterChip(
                         selected = isPreformatted,
@@ -132,10 +172,14 @@ fun CreateCardDialog(
                 }
 
                 Text(
-                    text = if (!isPreformatted) {
-                        "Standard erase state (0xFF). Format inside PS2 BIOS or game (recommended for emulator compatibility)."
+                    text = if (isPs1Platform) {
+                        if (!isPreformatted) "Zero-initialized 128 KB raw card image (.mcr)." else "Initialized with standard PS1 'MC' directory header and 15 empty slot blocks."
                     } else {
-                        "Initializes PS2 filesystem now so saves can be managed immediately in this app."
+                        if (!isPreformatted) {
+                            "Standard erase state (0xFF). Format inside PS2 BIOS or game (recommended for emulator compatibility)."
+                        } else {
+                            "Initializes PS2 filesystem now so saves can be managed immediately in this app."
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
@@ -202,7 +246,7 @@ fun CreateCardDialog(
             Button(
                 onClick = {
                     if (cardName.isNotBlank()) {
-                        onSaveCard(cardName.trim(), selectedSize, true, isPreformatted)
+                        onSaveCard(cardName.trim(), if (isPs1Platform) 0 else selectedSize, if (isPs1Platform) false else true, isPreformatted)
                     }
                 },
                 shape = RoundedCornerShape(12.dp)

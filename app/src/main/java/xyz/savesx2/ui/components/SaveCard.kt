@@ -276,7 +276,7 @@ fun SaveCard(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Export PSU") },
+                                text = { Text(if (save.isPsx) "Export MCS" else "Export PSU") },
                                 leadingIcon = { Icon(Icons.Default.FileDownload, null) },
                                 onClick = {
                                     menuExpanded = false

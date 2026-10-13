@@ -60,6 +60,7 @@ fun AppHeader(
     onCancelEdit: (() -> Unit)? = null,
     onResizeCard: (() -> Unit)? = null,
     isFolderCard: Boolean = false,
+    isPs1Card: Boolean = false,
     onOpenSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -229,16 +230,23 @@ fun AppHeader(
                         )
                     }
                     if (cardName != null && onResizeCard != null) {
+                        val canResize = !isFolderCard && !isPs1Card
                         DropdownMenuItem(
                             text = {
                                 Column {
                                     Text(
                                         text = "Resize Card",
-                                        color = if (isFolderCard) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
+                                        color = if (!canResize) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurface
                                     )
                                     if (isFolderCard) {
                                         Text(
                                             text = "Not supported for folder cards",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        )
+                                    } else if (isPs1Card) {
+                                        Text(
+                                            text = "PS1 cards have fixed 128 KB capacity",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                         )
@@ -249,13 +257,13 @@ fun AppHeader(
                                 Icon(
                                     Icons.Default.AspectRatio,
                                     null,
-                                    tint = if (isFolderCard) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = if (!canResize) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             },
-                            enabled = !isFolderCard,
+                            enabled = canResize,
                             onClick = {
                                 menuExpanded = false
-                                if (!isFolderCard) {
+                                if (canResize) {
                                     onResizeCard()
                                 }
                             }

@@ -97,6 +97,8 @@ class MainActivity : ComponentActivity() {
     private var pendingExportMaxBytes: ByteArray? = null
     private var pendingExportCbsBytes: ByteArray? = null
     private var pendingExportXpsBytes: ByteArray? = null
+    private var pendingExportMcsBytes: ByteArray? = null
+    private var pendingExportPsxBytes: ByteArray? = null
     private var pendingExportZipBytes: ByteArray? = null
     private var pendingBatchExportFormat: BatchExportFormat? = null
     private var pendingBatchExportSaves: List<Ps2Save>? = null
@@ -204,7 +206,10 @@ class MainActivity : ComponentActivity() {
                         return@withContext
                     }
 
-                    val bytes = if (formatted) {
+                    val isPs1 = sizeInMB == 0 || name.endsWith(".mcr", ignoreCase = true) || name.endsWith(".srm", ignoreCase = true) || name.endsWith(".mcd", ignoreCase = true)
+                    val bytes = if (isPs1) {
+                        if (formatted) Ps1Memcard.createFormattedCard() else ByteArray(Ps1Memcard.RAW_CARD_SIZE)
+                    } else if (formatted) {
                         MemcardFormatter.format(sizeInMB, useEcc)
                     } else {
                         MemcardFormatter.createUnformatted(sizeInMB, useEcc)
@@ -266,7 +271,7 @@ class MainActivity : ComponentActivity() {
 
     private fun saveLoadedCardToDirectory(dirUri: Uri, dirName: String) {
         val loaded = viewModel.uiState.value as? CardUiState.Loaded ?: return
-        val rawData = loaded.memcard.getRawDataDirect()
+        val rawData = loaded.getRawCardData() ?: return
         val cardName = loaded.cardName
         lifecycleScope.launch {
             viewModel.setLoading("Saving $cardName...")
@@ -387,6 +392,40 @@ class MainActivity : ComponentActivity() {
             }
         }
         pendingExportXpsBytes = null
+    }
+
+    private val exportMcsLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
+        isWaitingForActivityResult = false
+        uri?.let { targetUri ->
+            pendingExportMcsBytes?.let { bytes ->
+                try {
+                    contentResolver.openOutputStream(targetUri)?.use { out ->
+                        out.write(bytes)
+                    }
+                    showToast("MCS save exported successfully!")
+                } catch (_: Exception) {
+                    showToast("Failed to export save", isLong = true)
+                }
+            }
+        }
+        pendingExportMcsBytes = null
+    }
+
+    private val exportPsxLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri: Uri? ->
+        isWaitingForActivityResult = false
+        uri?.let { targetUri ->
+            pendingExportPsxBytes?.let { bytes ->
+                try {
+                    contentResolver.openOutputStream(targetUri)?.use { out ->
+                        out.write(bytes)
+                    }
+                    showToast("PSX save exported successfully!")
+                } catch (_: Exception) {
+                    showToast("Failed to export save", isLong = true)
+                }
+            }
+        }
+        pendingExportPsxBytes = null
     }
 
     private val exportZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
@@ -518,9 +557,9 @@ class MainActivity : ComponentActivity() {
         }
 
         val appVersion = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.0"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.1"
         } catch (_: Exception) {
-            "1.8.0"
+            "1.8.1"
         }
         viewModel.checkUpdate(appVersion)
 
@@ -715,13 +754,16 @@ class MainActivity : ComponentActivity() {
                                 onShowStats = { viewModel.setShowStatsDialog(true) },
                                 onResizeCard = { viewModel.setShowResizeDialog(true) },
                                 isFolderCard = (uiState as? CardUiState.Loaded)?.isFolderCard ?: false,
+                                isPs1Card = (uiState as? CardUiState.Loaded)?.isPs1Card ?: false,
                                 onOpenRawHex = {
                                     (uiState as? CardUiState.Loaded)?.let { loaded ->
-                                        viewModel.openHexEditor(
-                                            title = "${loaded.cardName} (Raw Card)",
-                                            data = loaded.memcard.getRawDataDirect(),
-                                            isRawCard = true
-                                        )
+                                        loaded.getRawCardData()?.let { raw ->
+                                            viewModel.openHexEditor(
+                                                title = "${loaded.cardName} (Raw Card)",
+                                                data = raw,
+                                                isRawCard = true
+                                            )
+                                        }
                                     }
                                 },
                                 onCancelEdit = { viewModel.cancelEdit() },
@@ -773,9 +815,9 @@ class MainActivity : ComponentActivity() {
                                     updateStatus = updateStatus,
                                     onCheckUpdate = {
                                          val version = try {
-                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.0"
+                                             packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.1"
                                          } catch (e: Exception) {
-                                             "1.8.0"
+                                             "1.8.1"
                                          }
                                         viewModel.checkUpdate(version)
                                     }
@@ -845,6 +887,7 @@ class MainActivity : ComponentActivity() {
                                     onFormatCard = onFormatCard,
                                     isRefreshing = isRefreshing,
                                     onRefresh = onRefresh,
+                                    isPs1Card = state.isPs1Card,
                                     onLoadIcon = { viewModel.loadSaveIcon(it) }
                                 )
                             }
@@ -893,6 +936,14 @@ class MainActivity : ComponentActivity() {
                             viewModel.selectSave(null)
                             triggerExportXps(save)
                         },
+                        onExportMcs = {
+                            viewModel.selectSave(null)
+                            triggerExportMcs(save)
+                        },
+                        onExportPsx = {
+                            viewModel.selectSave(null)
+                            triggerExportPsx(save)
+                        },
                         onExportZip = {
                             viewModel.selectSave(null)
                             triggerExportZip(save)
@@ -908,7 +959,9 @@ class MainActivity : ComponentActivity() {
                             editingTimestampsSave = save
                         },
                         onInspectFileHex = { file ->
-                            val data = file.data ?: (uiState as? CardUiState.Loaded)?.memcard?.getSaveFileBytes(save.directoryName, file.name) ?: ByteArray(0)
+                            val data = file.data ?: (uiState as? CardUiState.Loaded)?.let {
+                                it.ps1Memcard?.getSaveBytes(save.directoryName) ?: it.memcard?.getSaveFileBytes(save.directoryName, file.name)
+                            } ?: ByteArray(0)
                             viewModel.openHexEditor(
                                 title = file.name,
                                 data = data,
@@ -930,7 +983,9 @@ class MainActivity : ComponentActivity() {
                 }
 
                 inspectingChecksumFile?.let { (save, file) ->
-                    val data = file.data ?: (uiState as? CardUiState.Loaded)?.memcard?.getSaveFileBytes(save.directoryName, file.name) ?: ByteArray(0)
+                    val data = file.data ?: (uiState as? CardUiState.Loaded)?.let {
+                        it.ps1Memcard?.getSaveBytes(save.directoryName) ?: it.memcard?.getSaveFileBytes(save.directoryName, file.name)
+                    } ?: ByteArray(0)
                     ChecksumFixerDialog(
                         fileName = file.name,
                         dirName = save.directoryName,
@@ -996,7 +1051,7 @@ class MainActivity : ComponentActivity() {
 
                 if (showResizeDialog) {
                     (uiState as? CardUiState.Loaded)?.let { loaded ->
-                        if (!loaded.isFolderCard) {
+                        if (!loaded.isFolderCard && !loaded.isPs1Card && loaded.memcard != null) {
                             val currentMb = (loaded.memcard.totalCapacityMb + 0.5).toInt()
                             ResizeCardDialog(
                                 cardName = loaded.cardName,
@@ -1009,6 +1064,9 @@ class MainActivity : ComponentActivity() {
                             )
                         } else {
                             viewModel.setShowResizeDialog(false)
+                            if (loaded.isPs1Card) {
+                                showToast("PlayStation 1 memory cards have a fixed capacity of 128 KB.")
+                            }
                         }
                     }
                 }
@@ -1023,15 +1081,18 @@ class MainActivity : ComponentActivity() {
                 if (showStatsDialog) {
                     (uiState as? CardUiState.Loaded)?.let { loaded ->
                         CardStatsDialog(
-                            superBlock = loaded.memcard.superBlock,
+                            superBlock = loaded.memcard?.superBlock,
                             stats = loaded.stats,
+                            isPs1Card = loaded.isPs1Card,
                             onDismiss = { viewModel.setShowStatsDialog(false) },
                             onOpenHex = {
-                                viewModel.openHexEditor(
-                                    title = "${loaded.cardName} (Raw Card)",
-                                    data = loaded.memcard.getRawDataDirect(),
-                                    isRawCard = true
-                                )
+                                loaded.getRawCardData()?.let { raw ->
+                                    viewModel.openHexEditor(
+                                        title = "${loaded.cardName} (Raw Card)",
+                                        data = raw,
+                                        isRawCard = true
+                                    )
+                                }
                             }
                         )
                     }
@@ -1064,9 +1125,9 @@ class MainActivity : ComponentActivity() {
                         onClearRecentCards = { viewModel.clearRecentCards(this@MainActivity) },
                         onDismiss = { viewModel.setShowSettingsDialog(false) },
                         versionName = try {
-                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.0"
+                            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.8.1"
                         } catch (_: Exception) {
-                            "1.8.0"
+                            "1.8.1"
                         }
                     )
                 }
@@ -1228,7 +1289,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.setLoading("Saving ${loaded.cardName} folder...")
                 withContext(Dispatchers.IO) {
                     try {
-                        val ok = FolderMemcardHandler.convertFileToFolder(loaded.memcard, folder)
+                        val ok = if (loaded.memcard != null) FolderMemcardHandler.convertFileToFolder(loaded.memcard, folder) else false
                         if (ok) {
                             withContext(Dispatchers.Main) {
                                 viewModel.markCardSaved(loaded.cardUri, loaded.cardName, this@MainActivity)
@@ -1258,7 +1319,7 @@ class MainActivity : ComponentActivity() {
         if (loaded.cardUri != null) {
             val cardUri = loaded.cardUri
             val cardName = loaded.cardName
-            val rawData = loaded.memcard.getRawDataDirect()
+            val rawData = loaded.getRawCardData() ?: return
             lifecycleScope.launch {
                 viewModel.setLoading("Saving $cardName...")
                 withContext(Dispatchers.IO) {
@@ -1366,6 +1427,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun triggerExportMcs(save: Ps2Save) {
+        val bytes = viewModel.exportMcs(save.directoryName)
+        if (bytes != null) {
+            pendingExportMcsBytes = bytes
+            val filename = ExportFilenameFormat.generateFilename(save, "mcs", viewModel.exportFilenameFormat.value)
+            isWaitingForActivityResult = true
+            exportMcsLauncher.launch(filename)
+        } else {
+            showToast("Failed to export MCS")
+        }
+    }
+
+    private fun triggerExportPsx(save: Ps2Save) {
+        val bytes = viewModel.exportPsx(save.directoryName)
+        if (bytes != null) {
+            pendingExportPsxBytes = bytes
+            val filename = ExportFilenameFormat.generateFilename(save, "psx", viewModel.exportFilenameFormat.value)
+            isWaitingForActivityResult = true
+            exportPsxLauncher.launch(filename)
+        } else {
+            showToast("Failed to export PSX")
+        }
+    }
+
     private fun launchBatchExport(format: BatchExportFormat, saves: List<Ps2Save>) {
         if (saves.isEmpty()) return
         pendingBatchExportFormat = format
@@ -1430,10 +1515,11 @@ class MainActivity : ComponentActivity() {
     private fun triggerShareSave(save: Ps2Save, format: String = "psu") {
         lifecycleScope.launch {
             val bytes = withContext(Dispatchers.Default) {
-                if (format == "zip") {
-                    viewModel.exportZip(save.directoryName)
-                } else {
-                    viewModel.exportPsu(save.directoryName)
+                when (format) {
+                    "zip" -> viewModel.exportZip(save.directoryName)
+                    "mcs" -> viewModel.exportMcs(save.directoryName)
+                    "psx" -> viewModel.exportPsx(save.directoryName)
+                    else -> if (save.isPsx) viewModel.exportMcs(save.directoryName) else viewModel.exportPsu(save.directoryName)
                 }
             }
 
@@ -1451,7 +1537,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val ext = if (format == "zip") "zip" else "psu"
+                val ext = when (format) {
+                    "zip" -> "zip"
+                    "mcs" -> "mcs"
+                    "psx" -> "psx"
+                    else -> if (save.isPsx) "mcs" else "psu"
+                }
                 val filename = ExportFilenameFormat.generateFilename(save, ext, viewModel.exportFilenameFormat.value)
                 val tempFile = File(shareDir, filename)
                 tempFile.writeBytes(bytes)
@@ -1483,13 +1574,19 @@ class MainActivity : ComponentActivity() {
             viewModel.setLoading("Preparing ${selectedSaves.size} saves for sharing...")
             val uris = withContext(Dispatchers.IO) {
                 val shareDir = File(cacheDir, "shared_saves").apply { mkdirs() }
-                val ext = if (format == "zip") "zip" else "psu"
+                val ext = when (format) {
+                    "zip" -> "zip"
+                    "mcs" -> "mcs"
+                    "psx" -> "psx"
+                    else -> "psu"
+                }
                 val uriList = ArrayList<Uri>()
                 for (save in selectedSaves) {
-                    val bytes = if (format == "zip") {
-                        viewModel.exportZip(save.directoryName)
-                    } else {
-                        viewModel.exportPsu(save.directoryName)
+                    val bytes = when (format) {
+                        "zip" -> viewModel.exportZip(save.directoryName)
+                        "mcs" -> viewModel.exportMcs(save.directoryName)
+                        "psx" -> viewModel.exportPsx(save.directoryName)
+                        else -> if (save.isPsx) viewModel.exportMcs(save.directoryName) else viewModel.exportPsu(save.directoryName)
                     } ?: continue
 
                     val filename = ExportFilenameFormat.generateFilename(save, ext, viewModel.exportFilenameFormat.value)

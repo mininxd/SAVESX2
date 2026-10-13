@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import xyz.savesx2.core.CardStats
 import xyz.savesx2.core.ExportFilenameFormat
 import xyz.savesx2.core.MemcardFormatter
+import xyz.savesx2.core.Ps1Memcard
 import xyz.savesx2.core.Ps2DirectoryEntry
 import xyz.savesx2.core.Ps2Icon3dSession
 import xyz.savesx2.core.Ps2IconDecoder
@@ -49,12 +50,16 @@ sealed interface CardUiState {
     data class Loaded(
         val cardName: String,
         val cardUri: Uri?,
-        val memcard: Ps2Memcard,
+        val memcard: Ps2Memcard? = null,
+        val ps1Memcard: Ps1Memcard? = null,
         val saves: List<Ps2Save>,
         val stats: CardStats,
         val isFolderCard: Boolean = false,
-        val folderPath: String? = null
-    ) : CardUiState
+        val folderPath: String? = null,
+        val isPs1Card: Boolean = ps1Memcard != null
+    ) : CardUiState {
+        fun getRawCardData(): ByteArray? = ps1Memcard?.getRawDataDirect() ?: memcard?.getRawDataDirect()
+    }
     data class Error(val message: String) : CardUiState
 }
 
@@ -335,12 +340,13 @@ class MemcardViewModel : ViewModel() {
         if (_selectedSaveNames.value.any { it !in validNames }) {
             _selectedSaveNames.value = _selectedSaveNames.value.filter { it in validNames }.toSet()
         }
-        if (triggerIconPreload) {
+        if (triggerIconPreload && loaded.memcard != null) {
             startIconPreloading(loaded.saves, loaded.memcard)
         }
     }
 
-    private fun startIconPreloading(saves: List<Ps2Save>, card: Ps2Memcard) {
+    private fun startIconPreloading(saves: List<Ps2Save>, card: Ps2Memcard?) {
+        if (card == null) return
         iconPreloadJob?.cancel()
         val savesNeedingIcons = saves.filter { it.iconBitmap == null }
         if (savesNeedingIcons.isEmpty()) return
@@ -400,7 +406,8 @@ class MemcardViewModel : ViewModel() {
 
     suspend fun loadSaveIcon(save: Ps2Save): Bitmap? = withContext(Dispatchers.Default) {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withContext null
-        val bmp = current.memcard.decodeSaveIcon(save)
+        if (current.isPs1Card) return@withContext save.iconBitmap
+        val bmp = current.memcard?.decodeSaveIcon(save)
         if (bmp != null && save.iconBitmap == null) {
             withContext(Dispatchers.Main.immediate) {
                 applyIconBatchToState(mapOf(save.directoryName to bmp))
@@ -416,8 +423,9 @@ class MemcardViewModel : ViewModel() {
 
     fun markCardSaved(savedUri: Uri? = null, savedName: String? = null, context: Context? = null) {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return
-        savedCardCrc = calculateCrc(current.memcard.getRawDataDirect())
-        baselineCardData = current.memcard.getRawDataDirect().copyOf()
+        val rawBytes = current.ps1Memcard?.getRawDataDirect() ?: current.memcard?.getRawDataDirect() ?: return
+        savedCardCrc = calculateCrc(rawBytes)
+        baselineCardData = rawBytes.copyOf()
         clearUndoRedoHistory()
         _hasUnsavedChanges.value = false
         val updated = current.copy(
@@ -432,12 +440,11 @@ class MemcardViewModel : ViewModel() {
                 RecentCard(
                     uriString = savedUri.toString(),
                     fileName = name,
-                    sizeBytes = updated.memcard.getRawDataDirect().size.toLong(),
+                    sizeBytes = rawBytes.size.toLong(),
                     saveCount = updated.saves.size,
                     lastOpened = System.currentTimeMillis(),
-                    isFolder = updated.isFolderCard
+                    isFolder = current.isFolderCard
                 )
-            )
         }
     }
 
@@ -452,7 +459,7 @@ class MemcardViewModel : ViewModel() {
         actionDescription: String,
         currentData: ByteArray? = null
     ): Boolean {
-        val currentBytes = currentData ?: currentLoadedCard?.memcard?.getRawDataDirect()
+        val currentBytes = currentData ?: currentLoadedCard?.getRawCardData()
         synchronized(historyLock) {
             // Check if this action returned the card to the state before the latest undo snapshot
             if (currentBytes != null && undoStack.isNotEmpty()) {
@@ -500,7 +507,7 @@ class MemcardViewModel : ViewModel() {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
                 withContext(Dispatchers.Default) {
                     try {
-                        val currentBytes = current.memcard.getRawDataDirect().copyOf()
+                        val currentBytes = current.getRawCardData()?.copyOf() ?: return@withContext
                         val snapshotToRestore: CardSnapshot = synchronized(historyLock) {
                             if (undoStack.isEmpty()) {
                                 _canUndo.value = false
@@ -518,9 +525,24 @@ class MemcardViewModel : ViewModel() {
                         }
 
                         val restoredData = snapshotToRestore.data
-                        val card = Ps2Memcard.open(restoredData) ?: return@withContext
-                        val saves = card.listSaves()
-                        val stats = card.getStats()
+                        val isPs1 = current.isPs1Card || Ps1Memcard.isPs1Memcard(restoredData)
+                        val ps2Card: Ps2Memcard?
+                        val ps1Card: Ps1Memcard?
+                        val saves: List<Ps2Save>
+                        val stats: CardStats
+                        if (isPs1) {
+                            val p1 = Ps1Memcard.open(restoredData) ?: return@withContext
+                            ps1Card = p1
+                            ps2Card = null
+                            saves = p1.listSaves()
+                            stats = p1.getStats()
+                        } else {
+                            val p2 = Ps2Memcard.open(restoredData) ?: return@withContext
+                            ps1Card = null
+                            ps2Card = p2
+                            saves = p2.listSaves()
+                            stats = p2.getStats()
+                        }
                         val iconMap = current.saves.mapNotNull { s ->
                             s.iconBitmap?.let { bmp -> s.directoryName to bmp }
                         }.toMap()
@@ -533,7 +555,9 @@ class MemcardViewModel : ViewModel() {
                         val isAtSavedBaseline = savedCardCrc != null && calculateCrc(restoredData) == savedCardCrc
                         _hasUnsavedChanges.value = if (current.cardUri == null) true else !isAtSavedBaseline
                         val updated = current.copy(
-                            memcard = card,
+                            memcard = ps2Card,
+                            ps1Memcard = ps1Card,
+                            isPs1Card = isPs1,
                             saves = savesWithIcons,
                             stats = stats
                         )
@@ -556,7 +580,7 @@ class MemcardViewModel : ViewModel() {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
                 withContext(Dispatchers.Default) {
                     try {
-                        val currentBytes = current.memcard.getRawDataDirect().copyOf()
+                        val currentBytes = current.getRawCardData()?.copyOf() ?: return@withContext
                         val snapshotToRestore: CardSnapshot = synchronized(historyLock) {
                             if (redoStack.isEmpty()) {
                                 _canRedo.value = false
@@ -574,9 +598,24 @@ class MemcardViewModel : ViewModel() {
                         }
 
                         val restoredData = snapshotToRestore.data
-                        val card = Ps2Memcard.open(restoredData) ?: return@withContext
-                        val saves = card.listSaves()
-                        val stats = card.getStats()
+                        val isPs1 = current.isPs1Card || Ps1Memcard.isPs1Memcard(restoredData)
+                        val ps2Card: Ps2Memcard?
+                        val ps1Card: Ps1Memcard?
+                        val saves: List<Ps2Save>
+                        val stats: CardStats
+                        if (isPs1) {
+                            val p1 = Ps1Memcard.open(restoredData) ?: return@withContext
+                            ps1Card = p1
+                            ps2Card = null
+                            saves = p1.listSaves()
+                            stats = p1.getStats()
+                        } else {
+                            val p2 = Ps2Memcard.open(restoredData) ?: return@withContext
+                            ps1Card = null
+                            ps2Card = p2
+                            saves = p2.listSaves()
+                            stats = p2.getStats()
+                        }
                         val iconMap = current.saves.mapNotNull { s ->
                             s.iconBitmap?.let { bmp -> s.directoryName to bmp }
                         }.toMap()
@@ -589,7 +628,9 @@ class MemcardViewModel : ViewModel() {
                         val isAtSavedBaseline = savedCardCrc != null && calculateCrc(restoredData) == savedCardCrc
                         _hasUnsavedChanges.value = if (current.cardUri == null) true else !isAtSavedBaseline
                         val updated = current.copy(
-                            memcard = card,
+                            memcard = ps2Card,
+                            ps1Memcard = ps1Card,
+                            isPs1Card = isPs1,
                             saves = savesWithIcons,
                             stats = stats
                         )
@@ -616,13 +657,30 @@ class MemcardViewModel : ViewModel() {
                 if (baseline != null) {
                     withContext(Dispatchers.Default) {
                         try {
-                            val card = Ps2Memcard.open(baseline.copyOf()) ?: return@withContext
-                            val saves = card.listSaves()
-                            val stats = card.getStats()
+                            val isPs1 = current.isPs1Card || Ps1Memcard.isPs1Memcard(baseline)
+                            val ps2Card: Ps2Memcard?
+                            val ps1Card: Ps1Memcard?
+                            val saves: List<Ps2Save>
+                            val stats: CardStats
+                            if (isPs1) {
+                                val p1 = Ps1Memcard.open(baseline.copyOf()) ?: return@withContext
+                                ps1Card = p1
+                                ps2Card = null
+                                saves = p1.listSaves()
+                                stats = p1.getStats()
+                            } else {
+                                val p2 = Ps2Memcard.open(baseline.copyOf()) ?: return@withContext
+                                ps1Card = null
+                                ps2Card = p2
+                                saves = p2.listSaves()
+                                stats = p2.getStats()
+                            }
                             val isAtSavedBaseline = savedCardCrc != null && calculateCrc(baseline) == savedCardCrc
                             _hasUnsavedChanges.value = if (current.cardUri == null) true else !isAtSavedBaseline
                             val updated = current.copy(
-                                memcard = card,
+                                memcard = ps2Card,
+                                ps1Memcard = ps1Card,
+                                isPs1Card = isPs1,
                                 saves = saves,
                                 stats = stats
                             )
@@ -658,7 +716,7 @@ class MemcardViewModel : ViewModel() {
 
     fun getRawCardData(): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
-        return current.memcard.getRawDataDirect()
+        return current.getRawCardData()
     }
 
     fun setSearchQuery(query: String) {
@@ -727,7 +785,7 @@ class MemcardViewModel : ViewModel() {
                 ?: return@launch
 
             val iconBytes = withContext(Dispatchers.Default) {
-                loaded.memcard.getSaveFileBytes(save.directoryName, iconFileName)
+                loaded.memcard?.getSaveFileBytes(save.directoryName, iconFileName)
             } ?: return@launch
 
             val mesh = withContext(Dispatchers.Default) {
@@ -793,39 +851,77 @@ class MemcardViewModel : ViewModel() {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
                 withContext(Dispatchers.Default) {
                     try {
-                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
+                        val snapshotBefore = (current.ps1Memcard?.getRawDataDirect() ?: current.memcard?.getRawDataDirect())?.copyOf() ?: return@withContext
                         if (isRawCard) {
-                            val newCard = Ps2Memcard.open(newData)
-                            if (newCard != null) {
-                                pushUndoSnapshot(snapshotBefore, "Raw hex edit on ${truncateSaveName(current.cardName)}", newCard.getRawDataDirect())
-                                val saves = newCard.listSaves()
-                                val stats = newCard.getStats()
-                                setLoadedState(current.copy(memcard = newCard, saves = saves, stats = stats))
-                                _snackbarMessage.value = "Updated raw card data"
-                                _hexViewerData.value = null
-                                _hexEditorSession.value = null
+                            if (current.isPs1Card) {
+                                val newCard = Ps1Memcard.open(newData)
+                                if (newCard != null) {
+                                    pushUndoSnapshot(snapshotBefore, "Raw hex edit on ${truncateSaveName(current.cardName)}", newCard.getRawDataDirect())
+                                    val saves = newCard.listSaves()
+                                    val stats = newCard.getStats()
+                                    setLoadedState(current.copy(ps1Memcard = newCard, saves = saves, stats = stats))
+                                    _snackbarMessage.value = "Updated raw card data"
+                                    _hexViewerData.value = null
+                                    _hexEditorSession.value = null
+                                } else {
+                                    _snackbarMessage.value = "Failed: Invalid memory card structure"
+                                }
                             } else {
-                                _snackbarMessage.value = "Failed: Invalid memory card structure"
+                                val newCard = current.memcard?.let { Ps2Memcard.open(newData) }
+                                if (newCard != null) {
+                                    pushUndoSnapshot(snapshotBefore, "Raw hex edit on ${truncateSaveName(current.cardName)}", newCard.getRawDataDirect())
+                                    val saves = newCard.listSaves()
+                                    val stats = newCard.getStats()
+                                    setLoadedState(current.copy(memcard = newCard, saves = saves, stats = stats))
+                                    _snackbarMessage.value = "Updated raw card data"
+                                    _hexViewerData.value = null
+                                    _hexEditorSession.value = null
+                                } else {
+                                    _snackbarMessage.value = "Failed: Invalid memory card structure"
+                                }
                             }
                             return@withContext
                         }
 
-                        if (saveName != null && fileName != null) {
-                            val ok = current.memcard.updateSaveFile(saveName, fileName, newData)
-                            if (ok) {
-                                pushUndoSnapshot(snapshotBefore, "Edit ${truncateSaveName(fileName)} in ${truncateSaveName(saveName)}", current.memcard.getRawDataDirect())
-                                val saves = current.memcard.listSaves()
-                                val stats = current.memcard.getStats()
-                                val updatedSave = saves.firstOrNull { it.directoryName == saveName }
-                                setLoadedState(current.copy(saves = saves, stats = stats))
-                                if (_selectedSave.value?.directoryName == saveName) {
-                                    _selectedSave.value = updatedSave
+                        if (saveName != null) {
+                            if (current.isPs1Card) {
+                                val ok = current.ps1Memcard?.updateSaveFile(saveName, newData) == true
+                                if (ok) {
+                                    val newRaw = current.ps1Memcard!!.getRawDataDirect()
+                                    pushUndoSnapshot(snapshotBefore, "Edit ${truncateSaveName(fileName ?: saveName)} in ${truncateSaveName(saveName)}", newRaw)
+                                    val saves = current.ps1Memcard.listSaves()
+                                    val stats = current.ps1Memcard.getStats()
+                                    val updatedSave = saves.firstOrNull { it.directoryName == saveName }
+                                    setLoadedState(current.copy(saves = saves, stats = stats))
+                                    if (_selectedSave.value?.directoryName == saveName) {
+                                        _selectedSave.value = updatedSave
+                                    }
+                                    _snackbarMessage.value = "Saved changes to ${truncateSaveName(fileName ?: saveName)}"
+                                    _hexViewerData.value = null
+                                    _hexEditorSession.value = null
+                                } else {
+                                    _snackbarMessage.value = "Failed to update ${truncateSaveName(fileName ?: saveName)}"
                                 }
-                                _snackbarMessage.value = "Saved changes to ${truncateSaveName(fileName)}"
-                                _hexViewerData.value = null
-                                _hexEditorSession.value = null
-                            } else {
-                                _snackbarMessage.value = "Failed to update ${truncateSaveName(fileName)}"
+                                return@withContext
+                            }
+
+                            if (fileName != null && current.memcard != null) {
+                                val ok = current.memcard.updateSaveFile(saveName, fileName, newData)
+                                if (ok) {
+                                    pushUndoSnapshot(snapshotBefore, "Edit ${truncateSaveName(fileName)} in ${truncateSaveName(saveName)}", current.memcard.getRawDataDirect())
+                                    val saves = current.memcard.listSaves()
+                                    val stats = current.memcard.getStats()
+                                    val updatedSave = saves.firstOrNull { it.directoryName == saveName }
+                                    setLoadedState(current.copy(saves = saves, stats = stats))
+                                    if (_selectedSave.value?.directoryName == saveName) {
+                                        _selectedSave.value = updatedSave
+                                    }
+                                    _snackbarMessage.value = "Saved changes to ${truncateSaveName(fileName)}"
+                                    _hexViewerData.value = null
+                                    _hexEditorSession.value = null
+                                } else {
+                                    _snackbarMessage.value = "Failed to update ${truncateSaveName(fileName)}"
+                                }
                             }
                         }
                     } catch (_: Throwable) {
@@ -840,6 +936,10 @@ class MemcardViewModel : ViewModel() {
         viewModelScope.launch {
             historyMutex.withLock {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
+                if (current.isPs1Card || current.memcard == null) {
+                    _snackbarMessage.value = "PS1 saves do not support copy-protection attributes."
+                    return@withLock
+                }
                 val currentSave = current.saves.firstOrNull { it.directoryName == saveName }
                 if (currentSave != null && currentSave.isProtected == isProtected) {
                     return@withLock
@@ -877,6 +977,10 @@ class MemcardViewModel : ViewModel() {
         viewModelScope.launch {
             historyMutex.withLock {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
+                if (current.isPs1Card || current.memcard == null) {
+                    _snackbarMessage.value = "PS1 saves do not support timestamp editing."
+                    return@withLock
+                }
                 withContext(Dispatchers.Default) {
                     try {
                         val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
@@ -1025,6 +1129,49 @@ class MemcardViewModel : ViewModel() {
                                 _uiState.value = CardUiState.Error("Could not access memory card folder for $fileName.")
                             }
                         }
+                        Ps2FileType.PS1_MEMCARD_IMAGE -> {
+                            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            if (bytes == null) {
+                                _uiState.value = CardUiState.Error("Could not read file from storage.")
+                                return@withContext
+                            }
+                            val card = Ps1Memcard.open(bytes)
+                            if (card != null) {
+                                val saves = card.listSaves()
+                                val stats = card.getStats()
+                                savedCardCrc = calculateCrc(bytes)
+                                baselineCardData = bytes.copyOf()
+                                clearUndoRedoHistory()
+                                _hasUnsavedChanges.value = false
+                                val loaded = CardUiState.Loaded(
+                                    cardName = fileName,
+                                    cardUri = uri,
+                                    memcard = null,
+                                    ps1Memcard = card,
+                                    saves = saves,
+                                    stats = stats,
+                                    isFolderCard = false,
+                                    folderPath = null,
+                                    isPs1Card = true
+                                )
+                                setLoadedState(loaded)
+                                if (context != null) {
+                                    addRecentCard(
+                                        context,
+                                        RecentCard(
+                                            uriString = uri.toString(),
+                                            fileName = fileName,
+                                            sizeBytes = bytes.size.toLong(),
+                                            saveCount = saves.size,
+                                            lastOpened = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+                                _snackbarMessage.value = "Loaded PS1 Card: ${truncateSaveName(fileName)} (${saves.size} saves)"
+                            } else {
+                                _uiState.value = CardUiState.Error("Invalid PlayStation 1 Memory Card image format.")
+                            }
+                        }
                         Ps2FileType.PS2_MEMCARD_IMAGE -> {
                             val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
                             if (bytes == null) {
@@ -1070,14 +1217,16 @@ class MemcardViewModel : ViewModel() {
                         Ps2FileType.SAVEGAME_MAX,
                         Ps2FileType.SAVEGAME_CBS,
                         Ps2FileType.SAVEGAME_XPS,
-                        Ps2FileType.SAVEGAME_ZIP -> {
+                        Ps2FileType.SAVEGAME_ZIP,
+                        Ps2FileType.SAVEGAME_MCS,
+                        Ps2FileType.SAVEGAME_PSX -> {
                             _uiState.value = CardUiState.Error("'$fileName' is a savegame file, not a memory card. Please open or create a memory card first, then import this save.")
                         }
                         Ps2FileType.SAVEGAME_FOLDER -> {
                             _uiState.value = CardUiState.Error("'$fileName' is a savegame folder, not a memory card. Please open or create a memory card first, then import this save.")
                         }
                         Ps2FileType.INVALID -> {
-                            _uiState.value = CardUiState.Error("Selected file '$fileName' is not a valid PS2 memory card.")
+                            _uiState.value = CardUiState.Error("Selected file '$fileName' is not a valid PS2 or PS1 memory card.")
                         }
                     }
                 } catch (t: Throwable) {
@@ -1092,6 +1241,31 @@ class MemcardViewModel : ViewModel() {
             _uiState.value = CardUiState.Loading("Reading $name...")
             withContext(Dispatchers.Default) {
                 try {
+                    if (Ps1Memcard.isPs1Memcard(bytes, name)) {
+                        val card = Ps1Memcard.open(bytes)
+                        if (card != null) {
+                            val saves = card.listSaves()
+                            val stats = card.getStats()
+                            savedCardCrc = calculateCrc(bytes)
+                            baselineCardData = bytes.copyOf()
+                            clearUndoRedoHistory()
+                            _hasUnsavedChanges.value = false
+                            val loaded = CardUiState.Loaded(
+                                cardName = name,
+                                cardUri = uri,
+                                memcard = null,
+                                ps1Memcard = card,
+                                saves = saves,
+                                stats = stats,
+                                isFolderCard = false,
+                                folderPath = null,
+                                isPs1Card = true
+                            )
+                            setLoadedState(loaded)
+                            _snackbarMessage.value = "Loaded PS1 Card: ${truncateSaveName(name)} (${saves.size} saves)"
+                            return@withContext
+                        }
+                    }
                     val card = Ps2Memcard.open(bytes)
                     if (card != null) {
                         val saves = card.listSaves()
@@ -1110,10 +1284,43 @@ class MemcardViewModel : ViewModel() {
                         setLoadedState(loaded)
                         _snackbarMessage.value = "Loaded ${truncateSaveName(name)} (${saves.size} saves)"
                     } else {
-                        _uiState.value = CardUiState.Error("Invalid PS2 Memory Card image format.")
+                        _uiState.value = CardUiState.Error("Invalid Memory Card image format.")
                     }
                 } catch (t: Throwable) {
                     _uiState.value = CardUiState.Error("Failed to open card: ${t.message ?: "Out of memory"}")
+                }
+            }
+        }
+    }
+
+    fun createPs1Card(name: String, uri: Uri? = null, context: Context? = null) {
+        viewModelScope.launch {
+            _uiState.value = CardUiState.Loading("Creating PS1 memory card $name...")
+            withContext(Dispatchers.Default) {
+                try {
+                    val bytes = Ps1Memcard.createFormattedCard()
+                    val card = Ps1Memcard.open(bytes)
+                    if (card != null) {
+                        savedCardCrc = calculateCrc(bytes)
+                        baselineCardData = bytes.copyOf()
+                        clearUndoRedoHistory()
+                        _hasUnsavedChanges.value = uri == null
+                        val loaded = CardUiState.Loaded(
+                            cardName = name,
+                            cardUri = uri,
+                            memcard = null,
+                            ps1Memcard = card,
+                            saves = emptyList(),
+                            stats = card.getStats(),
+                            isFolderCard = false,
+                            folderPath = null,
+                            isPs1Card = true
+                        )
+                        setLoadedState(loaded)
+                        _snackbarMessage.value = "Created PS1 Memory Card: $name"
+                    }
+                } catch (t: Throwable) {
+                    _uiState.value = CardUiState.Error("Failed to create PS1 card: ${t.message}")
                 }
             }
         }
@@ -1163,8 +1370,30 @@ class MemcardViewModel : ViewModel() {
                 _uiState.value = CardUiState.Loading("Formatting card...")
                 withContext(Dispatchers.Default) {
                     try {
-                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
-                        val sizeInMB = current.memcard.totalCapacityMb.toInt()
+                        val snapshotBefore = (current.ps1Memcard?.getRawDataDirect() ?: current.memcard?.getRawDataDirect())?.copyOf() ?: return@withContext
+                        if (current.isPs1Card) {
+                            val bytes = Ps1Memcard.createFormattedCard()
+                            val card = Ps1Memcard.open(bytes)
+                            if (card != null) {
+                                pushUndoSnapshot(snapshotBefore, "Format PS1 card", card.getRawDataDirect())
+                                val loaded = CardUiState.Loaded(
+                                    cardName = current.cardName,
+                                    cardUri = current.cardUri,
+                                    memcard = null,
+                                    ps1Memcard = card,
+                                    saves = emptyList(),
+                                    stats = card.getStats(),
+                                    isFolderCard = false,
+                                    folderPath = null,
+                                    isPs1Card = true
+                                )
+                                setLoadedState(loaded)
+                                _snackbarMessage.value = "PS1 memory card formatted successfully."
+                            }
+                            return@withContext
+                        }
+
+                        val sizeInMB = current.memcard!!.totalCapacityMb.toInt()
                         val bytes = MemcardFormatter.format(sizeInMB, current.memcard.hasEcc)
                         val card = Ps2Memcard.open(bytes)
                         if (card != null) {
@@ -1195,7 +1424,12 @@ class MemcardViewModel : ViewModel() {
                     _snackbarMessage.value = "Folder-based memory cards do not have a fixed capacity and cannot be resized."
                     return@withLock
                 }
-                val currentMb = (current.memcard.totalCapacityMb + 0.5).toInt()
+                if (current.isPs1Card) {
+                    _snackbarMessage.value = "PlayStation 1 memory cards have a fixed standard size of 128 KB (15 slots)."
+                    return@withLock
+                }
+                val memcard = current.memcard ?: return@withLock
+                val currentMb = (memcard.totalCapacityMb + 0.5).toInt()
                 if (newSizeMb <= currentMb) {
                     _snackbarMessage.value = "Target size (${newSizeMb}MB) must be greater than current size (${currentMb}MB)."
                     return@withLock
@@ -1204,16 +1438,16 @@ class MemcardViewModel : ViewModel() {
                 _uiState.value = CardUiState.Loading("Resizing memory card to ${newSizeMb}MB...")
                 withContext(Dispatchers.Default) {
                     try {
-                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
-                        val success = current.memcard.resize(newSizeMb)
+                        val snapshotBefore = memcard.getRawDataDirect().copyOf()
+                        val success = memcard.resize(newSizeMb)
                         if (success) {
-                            pushUndoSnapshot(snapshotBefore, "Resize card to ${newSizeMb}MB", current.memcard.getRawDataDirect())
-                            val saves = current.memcard.listSaves(forceRefresh = true)
-                            val stats = current.memcard.getStats()
+                            pushUndoSnapshot(snapshotBefore, "Resize card to ${newSizeMb}MB", memcard.getRawDataDirect())
+                            val saves = memcard.listSaves(forceRefresh = true)
+                            val stats = memcard.getStats()
                             val loaded = CardUiState.Loaded(
                                 cardName = current.cardName,
                                 cardUri = current.cardUri,
-                                memcard = current.memcard,
+                                memcard = memcard,
                                 saves = saves,
                                 stats = stats
                             )
@@ -1223,9 +1457,9 @@ class MemcardViewModel : ViewModel() {
                             val reloaded = CardUiState.Loaded(
                                 cardName = current.cardName,
                                 cardUri = current.cardUri,
-                                memcard = current.memcard,
-                                saves = current.memcard.listSaves(),
-                                stats = current.memcard.getStats()
+                                memcard = memcard,
+                                saves = memcard.listSaves(),
+                                stats = memcard.getStats()
                             )
                             setLoadedState(reloaded)
                             _snackbarMessage.value = "Failed to resize memory card."
@@ -1244,7 +1478,25 @@ class MemcardViewModel : ViewModel() {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
                 withContext(Dispatchers.Default) {
                     try {
-                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
+                        if (current.isPs1Card) {
+                            val snapshotBefore = current.ps1Memcard!!.getRawDataDirect().copyOf()
+                            val success = current.ps1Memcard.deleteSave(saveName)
+                            if (success) {
+                                pushUndoSnapshot(snapshotBefore, "Delete save ${truncateSaveName(saveName)}", current.ps1Memcard.getRawDataDirect())
+                                val saves = current.ps1Memcard.listSaves()
+                                val stats = current.ps1Memcard.getStats()
+                                _selectedSave.value = null
+                                _selectedSaveNames.value = _selectedSaveNames.value - saveName
+                                val loaded = current.copy(saves = saves, stats = stats)
+                                setLoadedState(loaded)
+                                _snackbarMessage.value = "Deleted save ${truncateSaveName(saveName)}"
+                            } else {
+                                _snackbarMessage.value = "Failed to delete save ${truncateSaveName(saveName)}"
+                            }
+                            return@withContext
+                        }
+
+                        val snapshotBefore = current.memcard!!.getRawDataDirect().copyOf()
                         val success = current.memcard.deleteSave(saveName)
                         if (success) {
                             pushUndoSnapshot(snapshotBefore, "Delete save ${truncateSaveName(saveName)}", current.memcard.getRawDataDirect())
@@ -1273,7 +1525,31 @@ class MemcardViewModel : ViewModel() {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
                 withContext(Dispatchers.Default) {
                     try {
-                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
+                        if (current.isPs1Card) {
+                            val snapshotBefore = current.ps1Memcard!!.getRawDataDirect().copyOf()
+                            var deletedCount = 0
+                            for (name in saveNames) {
+                                if (current.ps1Memcard.deleteSave(name)) {
+                                    deletedCount++
+                                }
+                            }
+                            if (deletedCount > 0) {
+                                val actionDesc = if (deletedCount == 1) "Delete save ${truncateSaveName(saveNames.first())}" else "Delete $deletedCount saves"
+                                pushUndoSnapshot(snapshotBefore, actionDesc, current.ps1Memcard.getRawDataDirect())
+                                val saves = current.ps1Memcard.listSaves()
+                                val stats = current.ps1Memcard.getStats()
+                                _selectedSave.value = null
+                                _selectedSaveNames.value = emptySet()
+                                val loaded = current.copy(saves = saves, stats = stats)
+                                setLoadedState(loaded)
+                                _snackbarMessage.value = "Deleted $deletedCount saves"
+                            } else {
+                                _snackbarMessage.value = "Failed to delete selected saves"
+                            }
+                            return@withContext
+                        }
+
+                        val snapshotBefore = current.memcard!!.getRawDataDirect().copyOf()
                         var deletedCount = 0
                         for (name in saveNames) {
                             if (current.memcard.deleteSave(name)) {
@@ -1313,7 +1589,26 @@ class MemcardViewModel : ViewModel() {
                 _uiState.value = CardUiState.Loading("Importing Savegame...")
                 withContext(Dispatchers.Default) {
                     try {
-                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
+                        if (current.isPs1Card) {
+                            val snapshotBefore = current.ps1Memcard!!.getRawDataDirect().copyOf()
+                            val success = current.ps1Memcard.importSave(saveBytes, fileName)
+                            if (success) {
+                                val saves = current.ps1Memcard.listSaves()
+                                val stats = current.ps1Memcard.getStats()
+                                val newSave = saves.firstOrNull { old -> current.saves.none { it.directoryName == old.directoryName } }
+                                val actionDesc = if (newSave != null) "Import save ${truncateSaveName(newSave.directoryName)}" else "Import save"
+                                pushUndoSnapshot(snapshotBefore, actionDesc, current.ps1Memcard.getRawDataDirect())
+                                val loaded = current.copy(saves = saves, stats = stats)
+                                setLoadedState(loaded)
+                                _snackbarMessage.value = if (newSave != null) "Imported save '${truncateSaveName(newSave.directoryName)}' successfully!" else "Imported save successfully!"
+                            } else {
+                                setLoadedState(current)
+                                _snackbarMessage.value = "Failed to import PS1 save (insufficient slots or invalid format)."
+                            }
+                            return@withContext
+                        }
+
+                        val snapshotBefore = current.memcard!!.getRawDataDirect().copyOf()
                         val success = current.memcard.importSave(saveBytes, fileName)
                         if (success) {
                             val saves = current.memcard.listSaves()
@@ -1346,18 +1641,23 @@ class MemcardViewModel : ViewModel() {
             Ps2FileType.PS2_MEMCARD_IMAGE -> {
                 _snackbarMessage.value = "'${truncateSaveName(fileName)}' is a PS2 memory card image, not a savegame. Use 'Open Card' to open it."
             }
+            Ps2FileType.PS1_MEMCARD_IMAGE -> {
+                _snackbarMessage.value = "'${truncateSaveName(fileName)}' is a PlayStation 1 memory card image, not a savegame. Use 'Open Card' to open it."
+            }
             Ps2FileType.INVALID -> {
                 if (ZipSaveHandler.isZip(bytes) || fileName.endsWith(".zip", ignoreCase = true)) {
-                    _snackbarMessage.value = "ZIP archive '${truncateSaveName(fileName)}' does not contain a valid PS2 savegame (missing or invalid icon.sys)."
+                    _snackbarMessage.value = "ZIP archive '${truncateSaveName(fileName)}' does not contain a valid PS2 or PS1 savegame."
                 } else {
-                    _snackbarMessage.value = "'${truncateSaveName(fileName)}' is not a valid PS2 savegame (.psu, .max, .cbs, .xps, .zip)."
+                    _snackbarMessage.value = "'${truncateSaveName(fileName)}' is not a recognized savegame (.psu, .max, .cbs, .xps, .zip, .mcs, .psx)."
                 }
             }
             Ps2FileType.SAVEGAME_PSU,
             Ps2FileType.SAVEGAME_MAX,
             Ps2FileType.SAVEGAME_CBS,
             Ps2FileType.SAVEGAME_XPS,
-            Ps2FileType.SAVEGAME_ZIP -> {
+            Ps2FileType.SAVEGAME_ZIP,
+            Ps2FileType.SAVEGAME_MCS,
+            Ps2FileType.SAVEGAME_PSX -> {
                 importSave(bytes, fileName)
             }
             Ps2FileType.SAVEGAME_FOLDER -> {
@@ -1368,6 +1668,11 @@ class MemcardViewModel : ViewModel() {
 
     fun importSaveFolder(saveDir: File) {
         val currentCheck = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return
+        if (currentCheck.isPs1Card) {
+            _snackbarMessage.value = "Folder-based saves cannot be imported into a PS1 memory card."
+            return
+        }
+        val memcard = currentCheck.memcard ?: return
         if (!currentCheck.stats.isFormatted) {
             _snackbarMessage.value = "Card must be formatted before importing saves."
             return
@@ -1379,16 +1684,17 @@ class MemcardViewModel : ViewModel() {
         viewModelScope.launch {
             historyMutex.withLock {
                 val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return@withLock
+                val activeCard = current.memcard ?: return@withLock
                 _uiState.value = CardUiState.Loading("Importing Savegame Folder ${truncateSaveName(saveDir.name)}...")
                 withContext(Dispatchers.Default) {
                     try {
-                        val snapshotBefore = current.memcard.getRawDataDirect().copyOf()
-                        val success = FolderMemcardHandler.importSaveFolder(current.memcard, saveDir)
+                        val snapshotBefore = activeCard.getRawDataDirect().copyOf()
+                        val success = FolderMemcardHandler.importSaveFolder(activeCard, saveDir)
                         if (success) {
-                            val saves = current.memcard.listSaves()
-                            val stats = current.memcard.getStats()
+                            val saves = activeCard.listSaves()
+                            val stats = activeCard.getStats()
                             val actionDesc = "Import save ${truncateSaveName(saveDir.name)}"
-                            pushUndoSnapshot(snapshotBefore, actionDesc, current.memcard.getRawDataDirect())
+                            pushUndoSnapshot(snapshotBefore, actionDesc, activeCard.getRawDataDirect())
                             val loaded = current.copy(saves = saves, stats = stats)
                             setLoadedState(loaded)
                             _snackbarMessage.value = "Imported save ${truncateSaveName(saveDir.name)} successfully!"
@@ -1411,27 +1717,37 @@ class MemcardViewModel : ViewModel() {
 
     fun exportPsu(saveName: String): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
-        return current.memcard.exportSaveAsPsu(saveName)
+        return current.memcard?.exportSaveAsPsu(saveName)
     }
 
     fun exportMax(saveName: String): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
-        return current.memcard.exportSaveAsMax(saveName)
+        return current.memcard?.exportSaveAsMax(saveName)
     }
 
     fun exportCbs(saveName: String): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
-        return current.memcard.exportSaveAsCbs(saveName)
+        return current.memcard?.exportSaveAsCbs(saveName)
     }
 
     fun exportXps(saveName: String): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
-        return current.memcard.exportSaveAsXps(saveName)
+        return current.memcard?.exportSaveAsXps(saveName)
     }
 
     fun exportZip(saveName: String): ByteArray? {
         val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
-        return current.memcard.exportSaveAsZip(saveName)
+        return current.ps1Memcard?.exportSaveAsZip(saveName) ?: current.memcard?.exportSaveAsZip(saveName)
+    }
+
+    fun exportMcs(saveName: String): ByteArray? {
+        val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
+        return current.ps1Memcard?.exportSaveAsMcs(saveName) ?: current.memcard?.exportSaveAsMcs(saveName)
+    }
+
+    fun exportPsx(saveName: String): ByteArray? {
+        val current = (_uiState.value as? CardUiState.Loaded) ?: currentLoadedCard ?: return null
+        return current.ps1Memcard?.exportSaveAsPsx(saveName) ?: current.memcard?.exportSaveAsPsx(saveName)
     }
 
     fun exportSave(saveName: String, format: xyz.savesx2.core.BatchExportFormat): ByteArray? {
@@ -1440,6 +1756,8 @@ class MemcardViewModel : ViewModel() {
             xyz.savesx2.core.BatchExportFormat.MAX -> exportMax(saveName)
             xyz.savesx2.core.BatchExportFormat.CBS -> exportCbs(saveName)
             xyz.savesx2.core.BatchExportFormat.XPS -> exportXps(saveName)
+            xyz.savesx2.core.BatchExportFormat.MCS -> exportMcs(saveName)
+            xyz.savesx2.core.BatchExportFormat.PSX -> exportPsx(saveName)
         }
     }
 

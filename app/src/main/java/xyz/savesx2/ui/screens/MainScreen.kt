@@ -78,6 +78,7 @@ fun MainScreen(
     onFormatCard: () -> Unit = {},
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
+    isPs1Card: Boolean = false,
     onLoadIcon: (suspend (Ps2Save) -> Bitmap?)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -237,7 +238,8 @@ fun MainScreen(
             // Storage Bar
             StorageBar(
                 stats = stats,
-                saveCount = saves.size
+                saveCount = saves.size,
+                isPs1Card = isPs1Card
             )
 
             // Search Box

@@ -29,6 +29,7 @@ import xyz.savesx2.core.CardStats
 fun StorageBar(
     stats: CardStats,
     saveCount: Int,
+    isPs1Card: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
@@ -57,13 +58,15 @@ fun StorageBar(
             ) {
                 Column {
                     Text(
-                        text = "Card Storage",
+                        text = if (isPs1Card) "PS1 Card Storage" else "Card Storage",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = if (stats.isFormatted) "$saveCount saves stored" else "Card is unformatted",
+                        text = if (stats.isFormatted) {
+                            if (isPs1Card) "$saveCount saves (${stats.allocatedClusters}/15 slots)" else "$saveCount saves stored"
+                        } else "Card is unformatted",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -74,7 +77,9 @@ fun StorageBar(
                     color = if (stats.isFormatted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
                 ) {
                     Text(
-                        text = if (stats.isFormatted) "${stats.freeSpaceKb} KB free" else "UNFORMATTED",
+                        text = if (stats.isFormatted) {
+                            if (isPs1Card) "${stats.freeClusters} slots free" else "${stats.freeSpaceKb} KB free"
+                        } else "UNFORMATTED",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = if (stats.isFormatted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
@@ -105,14 +110,14 @@ fun StorageBar(
                     text = if (stats.isFormatted) {
                         "${stats.usedSpaceKb} KB / ${stats.totalSpaceKb} KB (${(stats.usedPercent * 100).toInt()}%)"
                     } else {
-                        "${stats.totalSpaceKb / 1024} MB Unformatted"
+                        if (isPs1Card) "128 KB Unformatted" else "${stats.totalSpaceKb / 1024} MB Unformatted"
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Text(
-                    text = if (stats.hasEcc) "ECC (528B/page)" else "RAW (512B/page)",
+                    text = if (isPs1Card) "PS1 (15 Frames)" else if (stats.hasEcc) "ECC (528B/page)" else "RAW (512B/page)",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary

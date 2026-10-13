@@ -4,6 +4,7 @@ import xyz.savesx2.core.FolderMemcardHandler
 import xyz.savesx2.core.MaxHandler
 import xyz.savesx2.core.MemcardFormatter
 import xyz.savesx2.core.Ps2DirectoryEntry
+import xyz.savesx2.core.Ps1Memcard
 import xyz.savesx2.core.Ps2Ecc
 import xyz.savesx2.core.Ps2FileDetector
 import xyz.savesx2.core.Ps2FileType
@@ -1113,6 +1114,140 @@ class Ps2MemcardTest {
         assertTrue(Ps2SerialDatabase.isRawSerialTitle("BASLUS-21445"))
         assertTrue(Ps2SerialDatabase.isRawSerialTitle("SLUS-20268"))
         assertFalse(Ps2SerialDatabase.isRawSerialTitle("Final Fantasy X"))
+    }
+
+    private fun createMockPs1SavePayload(title: String = "Test Save"): ByteArray {
+        val payload = ByteArray(8192)
+        // Magic "SC" at bytes 0..1
+        payload[0] = 0x53.toByte()
+        payload[1] = 0x43.toByte()
+        payload[2] = 0x11.toByte() // Icon display flag (1 frame icon)
+        payload[3] = 0x01.toByte() // 1 frame save block
+        // Shift-JIS or ASCII title at 0x04..0x43
+        val titleBytes = title.toByteArray(Charsets.US_ASCII)
+        System.arraycopy(titleBytes, 0, payload, 4, minOf(titleBytes.size, 64))
+        // 16-color CLUT at 0x60..0x7F (32 bytes)
+        for (i in 0 until 16) {
+            payload[0x60 + i * 2] = (i * 16).toByte()
+            payload[0x60 + i * 2 + 1] = 0x7C.toByte()
+        }
+        // 16x16 4-bit icon at 0x80..0xFF (128 bytes)
+        for (i in 0 until 128) {
+            payload[0x80 + i] = 0x12.toByte()
+        }
+        return payload
+    }
+
+    @Test
+    fun testPs1MemcardCreationAndFormatting() {
+        val rawCard = Ps1Memcard.createFormattedCard()
+        assertEquals(Ps1Memcard.RAW_CARD_SIZE, rawCard.size)
+        assertTrue(Ps1Memcard.isPs1Memcard(rawCard, "memcard1.mcr"))
+
+        val card = Ps1Memcard.open(rawCard)
+        assertNotNull(card)
+        assertTrue(card!!.isFormatted())
+        assertEquals(0, card.listSaves().size)
+
+        val stats = card.getStats()
+        assertEquals(15, stats.freeClusters)
+        assertEquals(0, stats.allocatedClusters)
+        assertEquals(15 * 8, stats.totalSpaceKb)
+        assertEquals(15 * 8, stats.freeSpaceKb)
+    }
+
+    @Test
+    fun testPs1SaveImportExportAndDelete() {
+        val rawCard = Ps1Memcard.createFormattedCard()
+        val card = Ps1Memcard.open(rawCard)
+        assertNotNull(card)
+
+        val savePayload = createMockPs1SavePayload("Final Fantasy VIII Slot 1")
+        val saveName = "BASLUS-00592-000"
+
+        // Import save
+        val imported = card!!.importSave(savePayload, saveName)
+        assertTrue(imported)
+
+        val saves = card.listSaves()
+        assertEquals(1, saves.size)
+        val save = saves[0]
+        assertEquals(saveName, save.directoryName)
+        assertTrue(save.isPsx)
+        assertEquals("Final Fantasy VIII", save.gameInfo?.title)
+        assertEquals(Ps2Region.US, save.region)
+        assertEquals(8, save.sizeInKb)
+
+        val statsAfterImport = card.getStats()
+        assertEquals(14, statsAfterImport.freeClusters)
+        assertEquals(1, statsAfterImport.allocatedClusters)
+
+        // Export as .mcs
+        val mcsBytes = card.exportSaveAsMcs(saveName)
+        assertNotNull(mcsBytes)
+        assertEquals(Ps1Memcard.BLOCK_SIZE + Ps1Memcard.FRAME_SIZE, mcsBytes!!.size)
+        assertTrue(Ps1Memcard.isMcsSave(mcsBytes, "$saveName.mcs"))
+
+        // Export as .psx
+        val psxBytes = card.exportSaveAsPsx(saveName)
+        assertNotNull(psxBytes)
+        assertEquals(Ps1Memcard.FRAME_SIZE, psxBytes!!.size)
+        assertTrue(Ps1Memcard.isPsxSave(psxBytes, "$saveName.psx"))
+
+        // Export as .zip
+        val zipBytes = card.exportSaveAsZip(saveName)
+        assertNotNull(zipBytes)
+        assertTrue(zipBytes!!.size > 0)
+
+        // Delete save
+        val deleted = card.deleteSave(saveName)
+        assertTrue(deleted)
+        assertEquals(0, card.listSaves().size)
+        assertEquals(15, card.getStats().freeClusters)
+    }
+
+    @Test
+    fun testPs1FileDetection() {
+        val rawCard = Ps1Memcard.createFormattedCard()
+        assertEquals(Ps2FileType.PS1_MEMCARD_IMAGE, Ps2FileDetector.detect(rawCard, "card.mcr"))
+        assertEquals(Ps2FileType.PS1_MEMCARD_IMAGE, Ps2FileDetector.detect(rawCard, "slot1.srm"))
+
+        val savePayload = createMockPs1SavePayload()
+        assertEquals(Ps2FileType.SAVEGAME_PSX, Ps2FileDetector.detect(savePayload, "save.psx"))
+
+        val mcsHeader = ByteArray(128)
+        mcsHeader[0] = 0x51.toByte()
+        mcsHeader[4] = 0x00.toByte()
+        mcsHeader[5] = 0x20.toByte() // 8192 bytes
+        mcsHeader[8] = 0xFF.toByte()
+        mcsHeader[9] = 0xFF.toByte()
+        val id = "BASLUS-00592-000".toByteArray(Charsets.US_ASCII)
+        System.arraycopy(id, 0, mcsHeader, 10, id.size)
+        mcsHeader[127] = Ps1Memcard.calculateBlockChecksum(mcsHeader, 0)
+        val mcsData = mcsHeader + savePayload
+        assertEquals(Ps2FileType.SAVEGAME_MCS, Ps2FileDetector.detect(mcsData, "save.mcs"))
+    }
+
+    @Test
+    fun testPs1SerialDatabaseLookup() {
+        val sotn = Ps2SerialDatabase.lookupGame("BASLUS-00067")
+        assertNotNull(sotn)
+        assertEquals("Castlevania: Symphony of the Night", sotn!!.title)
+        assertEquals(Ps2Region.US, sotn.region)
+
+        val ff7 = Ps2SerialDatabase.lookupGame("BASCUS-94163")
+        assertNotNull(ff7)
+        assertEquals("Final Fantasy VII", ff7!!.title)
+        assertEquals("Square Enix", ff7.publisher)
+
+        val mgs = Ps2SerialDatabase.lookupGame("BESLES-01301")
+        assertNotNull(mgs)
+        assertEquals("Metal Gear Solid", mgs!!.title)
+        assertEquals(Ps2Region.EU, mgs.region)
+
+        val chronoCross = Ps2SerialDatabase.lookupGame("BASLUS-01041")
+        assertNotNull(chronoCross)
+        assertEquals("Chrono Cross", chronoCross!!.title)
     }
 }
 
